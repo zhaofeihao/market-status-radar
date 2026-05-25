@@ -77,7 +77,7 @@ h1 {
 
 .searchline {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 8px;
 }
 
@@ -111,6 +111,112 @@ h1 {
 .refresh:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+.key-button {
+  background: #fffaf0 !important;
+  color: #172018 !important;
+}
+
+.credential-panel {
+  margin: 18px 0 22px;
+  border: 2px solid #172018;
+  background: #fffaf0;
+  padding: 16px;
+}
+
+.credential-panel-head {
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  align-items: flex-start;
+  border-bottom: 1px solid #d9d1c0;
+  padding-bottom: 14px;
+}
+
+.credential-panel h2 {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 28px;
+}
+
+.credential-panel p {
+  margin: 6px 0 0;
+  color: #536055;
+}
+
+.credential-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.credential-actions button {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 2px solid #172018;
+  background: #172018;
+  color: #fffaf0;
+  padding: 0 12px;
+  font-weight: 800;
+}
+
+.credential-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.credential-grid fieldset {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  border: 1px solid #d9d1c0;
+  padding: 12px;
+}
+
+.credential-grid legend {
+  padding: 0 6px;
+  font-weight: 900;
+}
+
+.credential-grid label {
+  color: #536055;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.credential-grid input {
+  min-width: 0;
+  height: 36px;
+  border: 1px solid #172018;
+  background: #f3efe6;
+  padding: 0 10px;
+}
+
+.credential-status {
+  width: fit-content;
+  border: 1px solid #8a5b00;
+  background: #fff0bd;
+  color: #8a5b00;
+  padding: 3px 7px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.credential-status.configured {
+  border-color: #157347;
+  background: #e8f5df;
+  color: #157347;
+}
+
+.public-only {
+  border-top: 1px solid #d9d1c0;
+  padding-top: 12px;
 }
 
 .summary-grid {
@@ -308,6 +414,11 @@ h1 {
   }
 
   .topbar {
+    grid-template-columns: 1fr;
+  }
+
+  .searchline,
+  .credential-grid {
     grid-template-columns: 1fr;
   }
 

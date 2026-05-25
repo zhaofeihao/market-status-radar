@@ -83,3 +83,11 @@ Current expected caveats:
 - Kraken public asset status is available, but detailed deposit and withdrawal methods require private API access.
 
 The UI intentionally does not infer deposit or withdrawal support unless an exchange response explicitly says so.
+
+## Browser-Local API Keys
+
+The web app includes an `API Keys` panel for Binance, OKX, and Bybit. Keys are stored in browser `localStorage` under `exchangeStatusMonitor.credentials.v1`.
+
+When keys are configured, searches are sent with `POST /api/search` and credentials are included only in that request body. The backend uses them to sign private exchange requests for the current search. It does not persist credentials, write them to files, or return secret values in responses.
+
+This is intended for local `localhost` usage. Do not expose this app on a public network without redesigning credential handling.

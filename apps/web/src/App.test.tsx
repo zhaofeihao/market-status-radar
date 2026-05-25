@@ -43,6 +43,7 @@ function mockFetch(payload: SearchResponse = response) {
 describe("App", () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
+    window.localStorage.clear();
   });
 
   afterEach(() => {
@@ -95,5 +96,54 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: /refresh/i }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+  });
+
+  it("saves API keys locally and sends them with searches", async () => {
+    const fetchMock = mockFetch();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: /api keys/i }));
+    await user.type(screen.getByLabelText("Binance API key"), "binance-key");
+    await user.type(screen.getByLabelText("Binance API secret"), "binance-secret");
+    await user.click(screen.getByRole("button", { name: /save api keys/i }));
+
+    expect(screen.getByText("Binance configured locally")).toBeInTheDocument();
+    expect(window.localStorage.getItem("exchangeStatusMonitor.credentials.v1")).toContain("binance-key");
+
+    await user.click(screen.getByRole("button", { name: /search/i }));
+
+    await screen.findByText("Bitget");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:4000/api/search",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          coin: "SOL",
+          credentials: {
+            binance: {
+              apiKey: "binance-key",
+              apiSecret: "binance-secret"
+            }
+          }
+        })
+      })
+    );
+  });
+
+  it("clears locally saved API keys", async () => {
+    window.localStorage.setItem(
+      "exchangeStatusMonitor.credentials.v1",
+      JSON.stringify({ binance: { apiKey: "binance-key", apiSecret: "binance-secret" } })
+    );
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: /api keys/i }));
+    expect(screen.getByText("Binance configured locally")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /clear api keys/i }));
+
+    expect(window.localStorage.getItem("exchangeStatusMonitor.credentials.v1")).toBeNull();
+    expect(screen.getByText("Binance missing")).toBeInTheDocument();
   });
 });

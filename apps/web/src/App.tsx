@@ -1,9 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, KeyRound, RefreshCcw, Search, XCircle } from "lucide-react";
-import type { ExchangeCoinStatus, FundingStatus, SearchResponse, SupportStatus } from "@status-monitor/shared";
+import { AlertTriangle, CheckCircle2, KeyRound, RefreshCcw, Save, Search, Trash2, XCircle } from "lucide-react";
+import type { ExchangeCoinStatus, FundingStatus, SearchCredentials, SearchResponse, SupportStatus } from "@status-monitor/shared";
 import { searchCoin } from "./api.js";
+import { clearCredentials, hasCredentials, loadCredentials, saveCredentials } from "./credentials.js";
 
 type FilterMode = "all" | "tradable" | "deposit_disabled" | "withdraw_disabled" | "needs_api_key" | "unknown";
+type DraftCredentials = {
+  binance: { apiKey: string; apiSecret: string };
+  okx: { apiKey: string; apiSecret: string; passphrase: string };
+  bybit: { apiKey: string; apiSecret: string };
+};
 
 const filters: Array<{ value: FilterMode; label: string }> = [
   { value: "all", label: "All" },
@@ -90,6 +96,45 @@ function summary(response: SearchResponse | null) {
   };
 }
 
+function emptyCredentials(): DraftCredentials {
+  return {
+    binance: { apiKey: "", apiSecret: "" },
+    okx: { apiKey: "", apiSecret: "", passphrase: "" },
+    bybit: { apiKey: "", apiSecret: "" }
+  };
+}
+
+function mergeCredentials(credentials: SearchCredentials): DraftCredentials {
+  return {
+    binance: {
+      apiKey: credentials.binance?.apiKey ?? "",
+      apiSecret: credentials.binance?.apiSecret ?? ""
+    },
+    okx: {
+      apiKey: credentials.okx?.apiKey ?? "",
+      apiSecret: credentials.okx?.apiSecret ?? "",
+      passphrase: credentials.okx?.passphrase ?? ""
+    },
+    bybit: {
+      apiKey: credentials.bybit?.apiKey ?? "",
+      apiSecret: credentials.bybit?.apiSecret ?? ""
+    }
+  };
+}
+
+function exchangeConfigured(credentials: SearchCredentials, exchange: "binance" | "okx" | "bybit") {
+  return hasCredentials({ [exchange]: credentials[exchange] });
+}
+
+function CredentialStatus({ credentials, exchange, label }: { credentials: SearchCredentials; exchange: "binance" | "okx" | "bybit"; label: string }) {
+  const configured = exchangeConfigured(credentials, exchange);
+  return (
+    <span className={`credential-status ${configured ? "configured" : ""}`}>
+      {label} {configured ? "configured locally" : "missing"}
+    </span>
+  );
+}
+
 export function App() {
   const [coin, setCoin] = useState("SOL");
   const [activeCoin, setActiveCoin] = useState("");
@@ -98,6 +143,9 @@ export function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [refreshIn, setRefreshIn] = useState(60);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [credentials, setCredentials] = useState<SearchCredentials>(() => loadCredentials());
+  const [draftCredentials, setDraftCredentials] = useState<SearchCredentials>(() => mergeCredentials(loadCredentials()));
 
   const runSearch = useCallback(async (nextCoin = activeCoin || coin) => {
     const normalized = nextCoin.trim().toUpperCase();
@@ -108,7 +156,7 @@ export function App() {
     setIsLoading(true);
     setError("");
     try {
-      const data = await searchCoin(normalized);
+      const data = await searchCoin(normalized, credentials);
       setResult(data);
       setActiveCoin(data.coin);
       setRefreshIn(60);
@@ -117,7 +165,7 @@ export function App() {
     } finally {
       setIsLoading(false);
     }
-  }, [activeCoin, coin]);
+  }, [activeCoin, coin, credentials]);
 
   useEffect(() => {
     if (!activeCoin) {
@@ -163,9 +211,160 @@ export function App() {
               <Search aria-hidden="true" size={16} />
               Search
             </button>
+            <button className="key-button" type="button" onClick={() => setSettingsOpen((open) => !open)}>
+              <KeyRound aria-hidden="true" size={16} />
+              API Keys
+            </button>
           </div>
         </form>
       </section>
+
+      {settingsOpen ? (
+        <section className="credential-panel" aria-label="API key settings">
+          <div className="credential-panel-head">
+            <div>
+              <h2>API Keys</h2>
+              <p>Stored in this browser only. Sent to the local API only during searches.</p>
+            </div>
+            <div className="credential-actions">
+              <button
+                type="button"
+                onClick={() => {
+                  const saved = saveCredentials(draftCredentials);
+                  setCredentials(saved);
+                  setDraftCredentials(mergeCredentials(saved));
+                }}
+              >
+                <Save aria-hidden="true" size={16} />
+                Save API keys
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  clearCredentials();
+                  setCredentials({});
+                  setDraftCredentials(emptyCredentials());
+                }}
+              >
+                <Trash2 aria-hidden="true" size={16} />
+                Clear API keys
+              </button>
+            </div>
+          </div>
+
+          <div className="credential-grid">
+            <fieldset>
+              <legend>Binance</legend>
+              <CredentialStatus credentials={credentials} exchange="binance" label="Binance" />
+              <label htmlFor="binance-api-key">Binance API key</label>
+              <input
+                id="binance-api-key"
+                value={draftCredentials.binance?.apiKey ?? ""}
+                onChange={(event) =>
+                  setDraftCredentials((current) => ({
+                    ...current,
+                    binance: { apiKey: event.target.value, apiSecret: current.binance?.apiSecret ?? "" }
+                  }))
+                }
+              />
+              <label htmlFor="binance-api-secret">Binance API secret</label>
+              <input
+                id="binance-api-secret"
+                type="password"
+                value={draftCredentials.binance?.apiSecret ?? ""}
+                onChange={(event) =>
+                  setDraftCredentials((current) => ({
+                    ...current,
+                    binance: { apiKey: current.binance?.apiKey ?? "", apiSecret: event.target.value }
+                  }))
+                }
+              />
+            </fieldset>
+
+            <fieldset>
+              <legend>OKX</legend>
+              <CredentialStatus credentials={credentials} exchange="okx" label="OKX" />
+              <label htmlFor="okx-api-key">OKX API key</label>
+              <input
+                id="okx-api-key"
+                value={draftCredentials.okx?.apiKey ?? ""}
+                onChange={(event) =>
+                  setDraftCredentials((current) => ({
+                    ...current,
+                    okx: {
+                      apiKey: event.target.value,
+                      apiSecret: current.okx?.apiSecret ?? "",
+                      passphrase: current.okx?.passphrase ?? ""
+                    }
+                  }))
+                }
+              />
+              <label htmlFor="okx-api-secret">OKX API secret</label>
+              <input
+                id="okx-api-secret"
+                type="password"
+                value={draftCredentials.okx?.apiSecret ?? ""}
+                onChange={(event) =>
+                  setDraftCredentials((current) => ({
+                    ...current,
+                    okx: {
+                      apiKey: current.okx?.apiKey ?? "",
+                      apiSecret: event.target.value,
+                      passphrase: current.okx?.passphrase ?? ""
+                    }
+                  }))
+                }
+              />
+              <label htmlFor="okx-passphrase">OKX passphrase</label>
+              <input
+                id="okx-passphrase"
+                type="password"
+                value={draftCredentials.okx?.passphrase ?? ""}
+                onChange={(event) =>
+                  setDraftCredentials((current) => ({
+                    ...current,
+                    okx: {
+                      apiKey: current.okx?.apiKey ?? "",
+                      apiSecret: current.okx?.apiSecret ?? "",
+                      passphrase: event.target.value
+                    }
+                  }))
+                }
+              />
+            </fieldset>
+
+            <fieldset>
+              <legend>Bybit</legend>
+              <CredentialStatus credentials={credentials} exchange="bybit" label="Bybit" />
+              <label htmlFor="bybit-api-key">Bybit API key</label>
+              <input
+                id="bybit-api-key"
+                value={draftCredentials.bybit?.apiKey ?? ""}
+                onChange={(event) =>
+                  setDraftCredentials((current) => ({
+                    ...current,
+                    bybit: { apiKey: event.target.value, apiSecret: current.bybit?.apiSecret ?? "" }
+                  }))
+                }
+              />
+              <label htmlFor="bybit-api-secret">Bybit API secret</label>
+              <input
+                id="bybit-api-secret"
+                type="password"
+                value={draftCredentials.bybit?.apiSecret ?? ""}
+                onChange={(event) =>
+                  setDraftCredentials((current) => ({
+                    ...current,
+                    bybit: { apiKey: current.bybit?.apiKey ?? "", apiSecret: event.target.value }
+                  }))
+                }
+              />
+            </fieldset>
+          </div>
+
+          <p className="public-only">Gate.io, Kraken, Bitget, and HTX continue using public endpoints in this version.</p>
+        </section>
+      ) : null}
 
       <section className="summary-grid" aria-label="Search summary">
         <div><span>{counts.exchanges} exchanges</span><p>covered</p></div>
