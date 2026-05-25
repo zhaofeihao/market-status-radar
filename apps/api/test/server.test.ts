@@ -7,14 +7,16 @@ const adapters: ExchangeAdapter[] = [
   {
     id: "bybit",
     name: "Bybit",
-    async searchCoin({ coin }) {
+    async searchCoin({ coin, credentials }) {
       return {
         exchange: { id: "bybit", name: "Bybit" },
         coin,
         spot: "supported",
         contract: "supported",
-        chains: [{ chain: "SOL", deposit: "enabled", withdraw: "enabled" }],
-        source: "public",
+        chains: credentials?.bybit?.apiKey
+          ? [{ chain: "SOL", deposit: "enabled", withdraw: "enabled" }]
+          : [{ chain: "SOL", deposit: "enabled", withdraw: "enabled" }],
+        source: credentials?.bybit?.apiKey ? "api_key" : "public",
         warnings: [],
         updatedAt: "2026-05-25T00:00:00.000Z"
       };
@@ -56,5 +58,32 @@ describe("createServer", () => {
       ]
     });
     expect(response.body.updatedAt).toEqual(expect.any(String));
+  });
+
+  it("accepts credential-aware searches without returning secret values", async () => {
+    const response = await request(createServer({ adapters }))
+      .post("/api/search")
+      .send({
+        coin: " sol ",
+        credentials: {
+          bybit: {
+            apiKey: "bybit-key",
+            apiSecret: "bybit-secret"
+          }
+        }
+      })
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      coin: "SOL",
+      results: [
+        {
+          exchange: { id: "bybit", name: "Bybit" },
+          source: "api_key",
+          chains: [{ chain: "SOL", deposit: "enabled", withdraw: "enabled" }]
+        }
+      ]
+    });
+    expect(JSON.stringify(response.body)).not.toContain("bybit-secret");
   });
 });

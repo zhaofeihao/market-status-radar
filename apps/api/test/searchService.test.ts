@@ -56,4 +56,19 @@ describe("searchCoinAcrossExchanges", () => {
       warnings: ["rate limited"]
     });
   });
+
+  it("passes credentials to every adapter without changing the normalized coin", async () => {
+    const seen: SearchInput[] = [];
+    const credentials = {
+      binance: { apiKey: "binance-key", apiSecret: "binance-secret" }
+    };
+
+    const result = await searchCoinAcrossExchanges(" sol ", [adapter("binance", async (input) => {
+      seen.push(input);
+      return status("binance", input.coin);
+    })], credentials);
+
+    expect(result.coin).toBe("SOL");
+    expect(seen).toEqual([{ coin: "SOL", credentials }]);
+  });
 });

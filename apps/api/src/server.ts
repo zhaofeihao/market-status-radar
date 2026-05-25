@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import type { ExchangeAdapter } from "./adapters/types.js";
 import { searchCoinAcrossExchanges } from "./services/searchService.js";
+import type { SearchCredentials } from "@status-monitor/shared";
 
 export interface ServerOptions {
   adapters: ExchangeAdapter[];
@@ -29,6 +30,21 @@ export function createServer(options: ServerOptions) {
       }
 
       res.json(await searchCoinAcrossExchanges(coin, options.adapters));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/search", async (req, res, next) => {
+    try {
+      const body = req.body as { coin?: unknown; credentials?: SearchCredentials };
+      const coin = typeof body.coin === "string" ? body.coin : "";
+      if (coin.trim().length === 0) {
+        res.status(400).json({ error: "coin is required" });
+        return;
+      }
+
+      res.json(await searchCoinAcrossExchanges(coin, options.adapters, body.credentials));
     } catch (error) {
       next(error);
     }

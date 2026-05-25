@@ -1,4 +1,4 @@
-import { createErrorStatus, normalizeCoin, type SearchResponse } from "@status-monitor/shared";
+import { createErrorStatus, normalizeCoin, type SearchCredentials, type SearchResponse } from "@status-monitor/shared";
 import type { ExchangeAdapter } from "../adapters/types.js";
 
 function errorMessage(error: unknown): string {
@@ -10,13 +10,14 @@ function errorMessage(error: unknown): string {
 
 export async function searchCoinAcrossExchanges(
   coinInput: string,
-  adapters: ExchangeAdapter[]
+  adapters: ExchangeAdapter[],
+  credentials?: SearchCredentials
 ): Promise<SearchResponse> {
   const coin = normalizeCoin(coinInput);
   const results = await Promise.all(
     adapters.map(async (adapter) => {
       try {
-        return await adapter.searchCoin({ coin });
+        return await adapter.searchCoin({ coin, credentials });
       } catch (error) {
         return createErrorStatus({ id: adapter.id, name: adapter.name }, coin, errorMessage(error));
       }

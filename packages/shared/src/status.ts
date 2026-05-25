@@ -6,6 +6,26 @@ export type DataSource = "public" | "api_key" | "mixed" | "unavailable";
 
 export interface SearchInput {
   coin: string;
+  credentials?: SearchCredentials;
+}
+
+export interface BasicApiCredentials {
+  apiKey: string;
+  apiSecret: string;
+}
+
+export interface OkxApiCredentials extends BasicApiCredentials {
+  passphrase: string;
+}
+
+export interface SearchCredentials {
+  binance?: BasicApiCredentials;
+  okx?: OkxApiCredentials;
+  bybit?: BasicApiCredentials;
+  gate?: BasicApiCredentials;
+  kraken?: BasicApiCredentials;
+  bitget?: BasicApiCredentials;
+  htx?: BasicApiCredentials;
 }
 
 export interface ExchangeIdentity {
