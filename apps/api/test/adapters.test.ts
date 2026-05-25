@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { JsonHttpClient } from "../src/httpClient.js";
+import { HttpError, type JsonHttpClient } from "../src/httpClient.js";
 import { createBinanceAdapter } from "../src/adapters/binance.js";
 import { createBitgetAdapter } from "../src/adapters/bitget.js";
 import { createBybitAdapter } from "../src/adapters/bybit.js";
@@ -146,6 +146,59 @@ describe("exchange adapters", () => {
     ]);
   });
 
+  it("does not fail Binance funding status when the spot symbol endpoint rejects an unsupported coin", async () => {
+    const adapter = createBinanceAdapter(
+      fakeClient((url) => {
+        if (url.includes("/api/v3/exchangeInfo")) {
+          throw new HttpError("HTTP 400 for invalid symbol", 400);
+        }
+        if (url.includes("/fapi/v1/exchangeInfo")) {
+          return { symbols: [] };
+        }
+        return [
+          {
+            coin: "ESPORTS",
+            networkList: [{ network: "BSC", depositEnable: true, withdrawEnable: true }]
+          }
+        ];
+      })
+    );
+
+    const result = await adapter.searchCoin({
+      coin: "ESPORTS",
+      credentials: { binance: { apiKey: "binance-key", apiSecret: "binance-secret" } }
+    });
+
+    expect(result.spot).toBe("unsupported");
+    expect(result.contract).toBe("unsupported");
+    expect(result.source).toBe("api_key");
+    expect(result.chains).toEqual([{ chain: "BSC", rawChain: "BSC", deposit: "enabled", withdraw: "enabled" }]);
+  });
+
+  it("keeps Binance market status when signed funding returns an authentication error", async () => {
+    const adapter = createBinanceAdapter(
+      fakeClient((url) => {
+        if (url.includes("/api/v3/exchangeInfo")) {
+          return { symbols: [{ symbol: "SOLUSDT", status: "TRADING" }] };
+        }
+        if (url.includes("/fapi/v1/exchangeInfo")) {
+          return { symbols: [{ symbol: "SOLUSDT", status: "TRADING" }] };
+        }
+        throw new HttpError("HTTP 401 for Binance wallet", 401);
+      })
+    );
+
+    const result = await adapter.searchCoin({
+      coin: "SOL",
+      credentials: { binance: { apiKey: "binance-key", apiSecret: "binance-secret" } }
+    });
+
+    expect(result.spot).toBe("supported");
+    expect(result.contract).toBe("supported");
+    expect(result.chains).toEqual([{ chain: "ALL", deposit: "requires_api_key", withdraw: "requires_api_key" }]);
+    expect(result.warnings).toContain("Binance private funding request failed. Check API key permissions, timestamp, and IP whitelist.");
+  });
+
   it("marks OKX funding data as requiring API key when the asset endpoint rejects anonymous access", async () => {
     const adapter = createOkxAdapter(
       fakeClient((url) => {
@@ -191,6 +244,30 @@ describe("exchange adapters", () => {
     expect(result.chains).toEqual([
       { chain: "SOL-SOLANA", rawChain: "SOL-Solana", deposit: "enabled", withdraw: "disabled", withdrawFee: "0.01", withdrawMin: "0.2" }
     ]);
+  });
+
+  it("keeps OKX market status when signed funding returns an authentication error", async () => {
+    const adapter = createOkxAdapter(
+      fakeClient((url) => {
+        if (url.includes("instType=SPOT")) {
+          return { code: "0", data: [{ instId: "ESPORTS-USDT", state: "live" }] };
+        }
+        if (url.includes("instType=SWAP")) {
+          return { code: "0", data: [] };
+        }
+        throw new HttpError("HTTP 401 for OKX funding", 401);
+      })
+    );
+
+    const result = await adapter.searchCoin({
+      coin: "ESPORTS",
+      credentials: { okx: { apiKey: "okx-key", apiSecret: "okx-secret", passphrase: "okx-pass" } }
+    });
+
+    expect(result.spot).toBe("supported");
+    expect(result.contract).toBe("unsupported");
+    expect(result.chains).toEqual([{ chain: "ALL", deposit: "requires_api_key", withdraw: "requires_api_key" }]);
+    expect(result.warnings).toContain("OKX private funding request failed. Check API key, passphrase, permissions, and IP whitelist.");
   });
 
   it("maps Bybit signed coin info when credentials are provided", async () => {

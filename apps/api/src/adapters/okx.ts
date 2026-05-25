@@ -22,6 +22,7 @@ export function createOkxAdapter(client: JsonHttpClient): ExchangeAdapter {
       const spotId = `${coin}-USDT`;
       const swapId = `${coin}-USDT-SWAP`;
       const fundingPath = `/api/v5/asset/currencies?ccy=${coin}`;
+      let fundingWarning = "";
       const fundingRequest = okxCredentialsComplete(input)
         ? client.getJson(`https://www.okx.com${fundingPath}`, {
             headers: createOkxAuthHeaders({
@@ -30,6 +31,9 @@ export function createOkxAdapter(client: JsonHttpClient): ExchangeAdapter {
               requestPath: fundingPath,
               timestamp: new Date().toISOString()
             })
+          }).catch(() => {
+            fundingWarning = "OKX private funding request failed. Check API key, passphrase, permissions, and IP whitelist.";
+            return { code: "requires_api_key" };
           })
         : client.getJson(`https://www.okx.com${fundingPath}`).catch(() => ({
             code: "requires_api_key"
@@ -64,7 +68,7 @@ export function createOkxAdapter(client: JsonHttpClient): ExchangeAdapter {
         contract: supportedWhen(okxMarketSupported(swap, swapId)),
         chains,
         source: fundingCode === "0" ? (okxCredentialsComplete(input) ? "api_key" : "public") : "mixed",
-        warnings: fundingCode === "0" ? [] : ["OKX funding currency endpoint requires API credentials in this environment."]
+        warnings: fundingCode === "0" ? [] : [fundingWarning || "OKX funding currency endpoint requires API credentials in this environment."]
       });
     }
   };

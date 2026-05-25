@@ -1,5 +1,5 @@
 import type { ExchangeAdapter } from "./types.js";
-import type { JsonHttpClient } from "../httpClient.js";
+import { HttpError, type JsonHttpClient } from "../httpClient.js";
 import type { ChainFundingStatus, SearchInput } from "@status-monitor/shared";
 import { createBinanceSignedQuery } from "../signing.js";
 import { authRequiredChain, asArray, objectRecord, statusResult, supportedWhen } from "./utils.js";
@@ -24,6 +24,29 @@ function mapBinanceChains(payload: unknown, coin: string): ChainFundingStatus[] 
   });
 }
 
+function binanceUnsupportedSymbol(error: unknown): boolean {
+  return error instanceof HttpError && error.status === 400;
+}
+
+async function safeBinanceSpot(client: JsonHttpClient, symbol: string): Promise<unknown> {
+  try {
+    return await client.getJson(`https://api.binance.com/api/v3/exchangeInfo?symbol=${symbol}`);
+  } catch (error) {
+    if (binanceUnsupportedSymbol(error)) {
+      return { symbols: [] };
+    }
+    return { symbols: undefined };
+  }
+}
+
+async function safeBinanceFutures(client: JsonHttpClient): Promise<unknown> {
+  try {
+    return await client.getJson("https://fapi.binance.com/fapi/v1/exchangeInfo");
+  } catch {
+    return { symbols: undefined };
+  }
+}
+
 export function createBinanceAdapter(client: JsonHttpClient): ExchangeAdapter {
   return {
     id: "binance",
@@ -31,6 +54,7 @@ export function createBinanceAdapter(client: JsonHttpClient): ExchangeAdapter {
     async searchCoin(input) {
       const { coin } = input;
       const symbol = `${coin}USDT`;
+      let fundingWarning = "";
       const fundingPromise = hasBinanceCredentials(input)
         ? client.getJson(
             `https://api.binance.com/sapi/v1/capital/config/getall?${createBinanceSignedQuery(
@@ -38,11 +62,14 @@ export function createBinanceAdapter(client: JsonHttpClient): ExchangeAdapter {
               input.credentials!.binance!.apiSecret
             )}`,
             { headers: { "X-MBX-APIKEY": input.credentials!.binance!.apiKey } }
-          )
+          ).catch(() => {
+            fundingWarning = "Binance private funding request failed. Check API key permissions, timestamp, and IP whitelist.";
+            return undefined;
+          })
         : Promise.resolve(undefined);
       const [spot, futures, funding] = await Promise.all([
-        client.getJson(`https://api.binance.com/api/v3/exchangeInfo?symbol=${symbol}`),
-        client.getJson("https://fapi.binance.com/fapi/v1/exchangeInfo"),
+        safeBinanceSpot(client, symbol),
+        safeBinanceFutures(client),
         fundingPromise
       ]);
 
@@ -58,7 +85,9 @@ export function createBinanceAdapter(client: JsonHttpClient): ExchangeAdapter {
         ),
         chains: funding ? mapBinanceChains(funding, coin) : [authRequiredChain()],
         source: funding ? "api_key" : "mixed",
-        warnings: funding ? [] : ["Binance deposit and withdrawal status requires signed wallet API access."]
+        warnings: funding
+          ? []
+          : [fundingWarning || "Binance deposit and withdrawal status requires signed wallet API access."]
       });
     }
   };
