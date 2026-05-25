@@ -1,5 +1,5 @@
 export interface JsonHttpClient {
-  getJson<T = unknown>(url: string): Promise<T>;
+  getJson<T = unknown>(url: string, options?: { headers?: Record<string, string> }): Promise<T>;
 }
 
 export class HttpError extends Error {
@@ -13,13 +13,13 @@ export class HttpError extends Error {
 
 export function createJsonHttpClient(timeoutMs: number): JsonHttpClient {
   return {
-    async getJson<T = unknown>(url: string): Promise<T> {
+    async getJson<T = unknown>(url: string, options?: { headers?: Record<string, string> }): Promise<T> {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
       try {
         const response = await fetch(url, {
-          headers: { accept: "application/json" },
+          headers: { accept: "application/json", ...options?.headers },
           signal: controller.signal
         });
 

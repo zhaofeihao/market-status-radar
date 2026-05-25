@@ -2,15 +2,16 @@ import { describe, expect, it } from "vitest";
 import type { JsonHttpClient } from "../src/httpClient.js";
 import { createBinanceAdapter } from "../src/adapters/binance.js";
 import { createBitgetAdapter } from "../src/adapters/bitget.js";
+import { createBybitAdapter } from "../src/adapters/bybit.js";
 import { createGateAdapter } from "../src/adapters/gate.js";
 import { createHtxAdapter } from "../src/adapters/htx.js";
 import { createKrakenAdapter } from "../src/adapters/kraken.js";
 import { createOkxAdapter } from "../src/adapters/okx.js";
 
-function fakeClient(resolver: (url: string) => unknown): JsonHttpClient {
+function fakeClient(resolver: (url: string, headers?: Record<string, string>) => unknown): JsonHttpClient {
   return {
-    async getJson(url) {
-      return resolver(url);
+    async getJson(url, options) {
+      return resolver(url, options?.headers);
     }
   };
 }
@@ -103,6 +104,48 @@ describe("exchange adapters", () => {
     expect(result.warnings).toContain("Binance deposit and withdrawal status requires signed wallet API access.");
   });
 
+  it("maps Binance signed wallet funding data when credentials are provided", async () => {
+    const seenHeaders: Array<Record<string, string> | undefined> = [];
+    const adapter = createBinanceAdapter(
+      fakeClient((url, headers) => {
+        seenHeaders.push(headers);
+        if (url.includes("/api/v3/exchangeInfo")) {
+          return { symbols: [{ symbol: "SOLUSDT", status: "TRADING" }] };
+        }
+        if (url.includes("/fapi/v1/exchangeInfo")) {
+          return { symbols: [{ symbol: "SOLUSDT", status: "TRADING" }] };
+        }
+        expect(url).toContain("/sapi/v1/capital/config/getall?");
+        expect(url).toContain("signature=");
+        return [
+          {
+            coin: "SOL",
+            networkList: [
+              {
+                network: "SOL",
+                depositEnable: true,
+                withdrawEnable: false,
+                withdrawFee: "0.006",
+                withdrawMin: "0.1"
+              }
+            ]
+          }
+        ];
+      })
+    );
+
+    const result = await adapter.searchCoin({
+      coin: "SOL",
+      credentials: { binance: { apiKey: "binance-key", apiSecret: "binance-secret" } }
+    });
+
+    expect(seenHeaders).toContainEqual({ "X-MBX-APIKEY": "binance-key" });
+    expect(result.source).toBe("api_key");
+    expect(result.chains).toEqual([
+      { chain: "SOL", rawChain: "SOL", deposit: "enabled", withdraw: "disabled", withdrawFee: "0.006", withdrawMin: "0.1" }
+    ]);
+  });
+
   it("marks OKX funding data as requiring API key when the asset endpoint rejects anonymous access", async () => {
     const adapter = createOkxAdapter(
       fakeClient((url) => {
@@ -120,6 +163,77 @@ describe("exchange adapters", () => {
 
     expect(result.chains).toEqual([{ chain: "ALL", deposit: "requires_api_key", withdraw: "requires_api_key" }]);
     expect(result.source).toBe("mixed");
+  });
+
+  it("maps OKX signed funding data when credentials are provided", async () => {
+    const adapter = createOkxAdapter(
+      fakeClient((url, headers) => {
+        if (url.includes("instType=SPOT")) {
+          return { code: "0", data: [{ instId: "SOL-USDT", state: "live" }] };
+        }
+        if (url.includes("instType=SWAP")) {
+          return { code: "0", data: [{ instId: "SOL-USDT-SWAP", state: "live" }] };
+        }
+        expect(headers?.["OK-ACCESS-KEY"]).toBe("okx-key");
+        return {
+          code: "0",
+          data: [{ ccy: "SOL", chain: "SOL-Solana", canDep: true, canWd: false, minFee: "0.01", minWd: "0.2" }]
+        };
+      })
+    );
+
+    const result = await adapter.searchCoin({
+      coin: "SOL",
+      credentials: { okx: { apiKey: "okx-key", apiSecret: "okx-secret", passphrase: "okx-pass" } }
+    });
+
+    expect(result.source).toBe("api_key");
+    expect(result.chains).toEqual([
+      { chain: "SOL-SOLANA", rawChain: "SOL-Solana", deposit: "enabled", withdraw: "disabled", withdrawFee: "0.01", withdrawMin: "0.2" }
+    ]);
+  });
+
+  it("maps Bybit signed coin info when credentials are provided", async () => {
+    const adapter = createBybitAdapter(
+      fakeClient((url, headers) => {
+        if (url.includes("category=spot")) {
+          return { retCode: 0, result: { list: [{ symbol: "SOLUSDT", status: "Trading" }] } };
+        }
+        if (url.includes("category=linear")) {
+          return { retCode: 0, result: { list: [{ symbol: "SOLUSDT", status: "Trading" }] } };
+        }
+        expect(headers?.["X-BAPI-API-KEY"]).toBe("bybit-key");
+        return {
+          retCode: 0,
+          result: {
+            rows: [
+              {
+                coin: "SOL",
+                chains: [
+                  {
+                    chain: "SOL",
+                    chainDeposit: "1",
+                    chainWithdraw: "0",
+                    withdrawFee: "0.01",
+                    withdrawMin: "0.2"
+                  }
+                ]
+              }
+            ]
+          }
+        };
+      })
+    );
+
+    const result = await adapter.searchCoin({
+      coin: "SOL",
+      credentials: { bybit: { apiKey: "bybit-key", apiSecret: "bybit-secret" } }
+    });
+
+    expect(result.source).toBe("api_key");
+    expect(result.chains).toEqual([
+      { chain: "SOL", rawChain: "SOL", deposit: "enabled", withdraw: "disabled", withdrawFee: "0.01", withdrawMin: "0.2" }
+    ]);
   });
 
   it("keeps OKX market statuses when the funding endpoint returns HTTP 401", async () => {

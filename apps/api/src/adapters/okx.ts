@@ -1,6 +1,7 @@
 import type { ExchangeAdapter } from "./types.js";
 import type { JsonHttpClient } from "../httpClient.js";
-import type { ChainFundingStatus } from "@status-monitor/shared";
+import type { ChainFundingStatus, SearchInput } from "@status-monitor/shared";
+import { createOkxAuthHeaders } from "../signing.js";
 import { asArray, authRequiredChain, objectRecord, statusResult, supportedWhen } from "./utils.js";
 
 function okxMarketSupported(payload: unknown, instId: string): boolean {
@@ -16,15 +17,27 @@ export function createOkxAdapter(client: JsonHttpClient): ExchangeAdapter {
   return {
     id: "okx",
     name: "OKX",
-    async searchCoin({ coin }) {
+    async searchCoin(input) {
+      const { coin } = input;
       const spotId = `${coin}-USDT`;
       const swapId = `${coin}-USDT-SWAP`;
+      const fundingPath = `/api/v5/asset/currencies?ccy=${coin}`;
+      const fundingRequest = okxCredentialsComplete(input)
+        ? client.getJson(`https://www.okx.com${fundingPath}`, {
+            headers: createOkxAuthHeaders({
+              ...input.credentials!.okx!,
+              method: "GET",
+              requestPath: fundingPath,
+              timestamp: new Date().toISOString()
+            })
+          })
+        : client.getJson(`https://www.okx.com${fundingPath}`).catch(() => ({
+            code: "requires_api_key"
+          }));
       const [spot, swap, funding] = await Promise.all([
         client.getJson(`https://www.okx.com/api/v5/public/instruments?instType=SPOT&instId=${spotId}`),
         client.getJson(`https://www.okx.com/api/v5/public/instruments?instType=SWAP&instId=${swapId}`),
-        client.getJson(`https://www.okx.com/api/v5/asset/currencies?ccy=${coin}`).catch(() => ({
-          code: "requires_api_key"
-        }))
+        fundingRequest
       ]);
 
       const fundingRecord = objectRecord(funding);
@@ -50,9 +63,13 @@ export function createOkxAdapter(client: JsonHttpClient): ExchangeAdapter {
         spot: supportedWhen(okxMarketSupported(spot, spotId)),
         contract: supportedWhen(okxMarketSupported(swap, swapId)),
         chains,
-        source: fundingCode === "0" ? "public" : "mixed",
+        source: fundingCode === "0" ? (okxCredentialsComplete(input) ? "api_key" : "public") : "mixed",
         warnings: fundingCode === "0" ? [] : ["OKX funding currency endpoint requires API credentials in this environment."]
       });
     }
   };
+}
+
+function okxCredentialsComplete(input: SearchInput) {
+  return Boolean(input.credentials?.okx?.apiKey && input.credentials.okx.apiSecret && input.credentials.okx.passphrase);
 }
