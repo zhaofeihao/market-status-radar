@@ -6,7 +6,8 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: "jsdom",
-    setupFiles: ["./src/testSetup.ts"]
+    setupFiles: ["./src/testSetup.ts"],
+    exclude: ["**/node_modules/**", "**/dist/**", "**/dist-types/**"]
   },
   resolve: {
     alias: {

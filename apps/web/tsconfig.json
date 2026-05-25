@@ -2,9 +2,8 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "jsx": "react-jsx",
-    "rootDir": "src",
-    "outDir": "dist-types",
-    "types": ["vitest/globals", "@testing-library/jest-dom"],
+    "noEmit": true,
+    "types": ["vite/client", "vitest/globals", "@testing-library/jest-dom"],
     "paths": {
       "@status-monitor/shared": ["../../packages/shared/src/index.ts"]
     }

@@ -122,6 +122,27 @@ describe("exchange adapters", () => {
     expect(result.source).toBe("mixed");
   });
 
+  it("keeps OKX market statuses when the funding endpoint returns HTTP 401", async () => {
+    const adapter = createOkxAdapter(
+      fakeClient((url) => {
+        if (url.includes("instType=SPOT")) {
+          return { code: "0", data: [{ instId: "SOL-USDT", state: "live" }] };
+        }
+        if (url.includes("instType=SWAP")) {
+          return { code: "0", data: [{ instId: "SOL-USDT-SWAP", state: "live" }] };
+        }
+        throw new Error("HTTP 401 for OKX funding");
+      })
+    );
+
+    const result = await adapter.searchCoin({ coin: "SOL" });
+
+    expect(result.spot).toBe("supported");
+    expect(result.contract).toBe("supported");
+    expect(result.chains).toEqual([{ chain: "ALL", deposit: "requires_api_key", withdraw: "requires_api_key" }]);
+    expect(result.warnings).toContain("OKX funding currency endpoint requires API credentials in this environment.");
+  });
+
   it("maps HTX reference currency chain statuses", async () => {
     const adapter = createHtxAdapter(
       fakeClient((url) => {

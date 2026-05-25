@@ -1,5 +1,6 @@
 import type { ExchangeAdapter } from "./types.js";
 import type { JsonHttpClient } from "../httpClient.js";
+import type { ChainFundingStatus } from "@status-monitor/shared";
 import { asArray, authRequiredChain, objectRecord, statusResult, supportedWhen } from "./utils.js";
 
 function okxMarketSupported(payload: unknown, instId: string): boolean {
@@ -21,14 +22,16 @@ export function createOkxAdapter(client: JsonHttpClient): ExchangeAdapter {
       const [spot, swap, funding] = await Promise.all([
         client.getJson(`https://www.okx.com/api/v5/public/instruments?instType=SPOT&instId=${spotId}`),
         client.getJson(`https://www.okx.com/api/v5/public/instruments?instType=SWAP&instId=${swapId}`),
-        client.getJson(`https://www.okx.com/api/v5/asset/currencies?ccy=${coin}`)
+        client.getJson(`https://www.okx.com/api/v5/asset/currencies?ccy=${coin}`).catch(() => ({
+          code: "requires_api_key"
+        }))
       ]);
 
       const fundingRecord = objectRecord(funding);
       const fundingCode = String(fundingRecord.code ?? "");
       const chains =
         fundingCode === "0"
-          ? asArray(fundingRecord.data).map((item) => {
+          ? asArray(fundingRecord.data).map((item): ChainFundingStatus => {
               const row = objectRecord(item);
               return {
                 chain: String(row.chain ?? row.ccy ?? "ALL").toUpperCase(),

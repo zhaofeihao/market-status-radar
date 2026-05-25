@@ -1,8 +1,10 @@
 .superpowers/
 node_modules/
 dist/
+dist-types/
 build/
 .env
 .env.*
 !.env.example
 *.log
+*.tsbuildinfo

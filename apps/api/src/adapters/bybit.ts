@@ -1,3 +1,4 @@
+import type { ChainFundingStatus } from "@status-monitor/shared";
 import type { ExchangeAdapter } from "./types.js";
 import type { JsonHttpClient } from "../httpClient.js";
 import { asArray, authRequiredChain, objectRecord, statusResult, supportedWhen } from "./utils.js";
@@ -22,7 +23,7 @@ export function createBybitAdapter(client: JsonHttpClient): ExchangeAdapter {
       const retCode = Number(fundingRecord.retCode);
       const chains =
         retCode === 0
-          ? bybitList(funding).map((item) => {
+          ? bybitList(funding).map((item): ChainFundingStatus => {
               const row = objectRecord(item);
               return {
                 chain: String(row.chain ?? row.chainType ?? "ALL").toUpperCase(),

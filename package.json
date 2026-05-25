@@ -8,8 +8,8 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "npm run dev --workspace @status-monitor/api & npm run dev --workspace @status-monitor/web",
-    "build": "npm run build --workspaces",
+    "dev": "npm run build --workspace @status-monitor/shared && npm run dev --workspace @status-monitor/api & npm run dev --workspace @status-monitor/web",
+    "build": "npm run build --workspace @status-monitor/shared && npm run build --workspace @status-monitor/api && npm run build --workspace @status-monitor/web",
     "test": "npm run test --workspaces",
     "test:api": "npm run test --workspace @status-monitor/api --",
     "test:web": "npm run test --workspace @status-monitor/web --",

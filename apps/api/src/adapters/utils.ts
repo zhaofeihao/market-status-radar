@@ -5,7 +5,7 @@ export interface AdapterContext {
   client: JsonHttpClient;
 }
 
-export function boolFunding(value: boolean | string | number | undefined, enabledValue = true): FundingStatus {
+export function boolFunding(value: unknown, enabledValue: boolean | string | number = true): FundingStatus {
   if (value === undefined) {
     return "unknown";
   }

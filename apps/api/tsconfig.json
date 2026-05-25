@@ -6,9 +6,8 @@
     "declaration": true,
     "sourceMap": true,
     "composite": true,
-    "paths": {
-      "@status-monitor/shared": ["../../packages/shared/src/index.ts"]
-    }
+    "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
   },
-  "include": ["src", "test"]
+  "include": ["src"],
+  "exclude": ["test"]
 }
