@@ -91,11 +91,12 @@ describe("App", () => {
     expect(fetchMock).toHaveBeenCalledWith("http://localhost:4000/api/search?coin=SOL");
     expect(screen.getByText("2 exchanges")).toBeInTheDocument();
     expect(screen.getByText("Spot 81.13")).toBeInTheDocument();
-    expect(screen.getByText("Index 81.12")).toBeInTheDocument();
-    expect(screen.getByText("Mark 81.07")).toBeInTheDocument();
+    expect(screen.getByText("Contract 81.08")).toBeInTheDocument();
+    expect(screen.queryByText("Index 81.12")).not.toBeInTheDocument();
+    expect(screen.queryByText("Mark 81.07")).not.toBeInTheDocument();
+    expect(screen.queryByText("Price")).not.toBeInTheDocument();
     expect(screen.getByText("Components 2")).toBeInTheDocument();
-    expect(screen.getByText("BINANCE SOL/USDT")).toBeInTheDocument();
-    expect(screen.getByText("37.00%")).toBeInTheDocument();
+    expect(screen.getByText("Components 2").closest("details")).not.toHaveAttribute("open");
     expect(screen.getByText("Withdraw disabled")).toBeInTheDocument();
     expect(screen.getByText("Requires API key")).toBeInTheDocument();
   });

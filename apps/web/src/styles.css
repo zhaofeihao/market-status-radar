@@ -300,13 +300,13 @@ h1 {
 }
 
 .result-table {
-  min-width: 1220px;
+  min-width: 1160px;
 }
 
 .table-head,
 .table-row {
   display: grid;
-  grid-template-columns: 1.05fr 0.72fr 0.72fr 1.2fr 2.1fr 0.72fr;
+  grid-template-columns: 1.35fr 0.72fr 0.72fr 1.05fr 2.1fr 0.72fr;
   gap: 14px;
   align-items: start;
 }
@@ -382,22 +382,44 @@ h1 {
   gap: 8px;
 }
 
-.prices {
-  display: grid;
+.exchange-cell {
+  min-width: 0;
+}
+
+.price-tags {
+  display: flex;
+  flex-wrap: wrap;
   gap: 5px;
+  margin-top: 8px;
   font-variant-numeric: tabular-nums;
 }
 
-.prices span {
+.price-tag {
   width: fit-content;
-  border-left: 3px solid #d2e25f;
-  padding-left: 7px;
-  font-size: 13px;
+  border: 1px solid currentColor;
+  padding: 3px 7px;
+  font-size: 12px;
   font-weight: 800;
+  line-height: 1.2;
+}
+
+.price-tag-spot {
+  color: #157347;
+  background: #e8f5df;
+}
+
+.price-tag-contract {
+  color: #285f88;
+  background: #e1f0ff;
+}
+
+.components-cell {
+  display: grid;
+  gap: 5px;
 }
 
 .index-components {
-  margin-top: 4px;
+  margin-top: 0;
 }
 
 .index-components summary {

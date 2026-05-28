@@ -86,18 +86,6 @@ function formatTime(value?: string) {
   }).format(new Date(value));
 }
 
-function priceLines(price?: ExchangePriceStatus) {
-  if (!price || price.source === "unavailable") {
-    return [];
-  }
-  return [
-    price.spotLastPrice ? `Spot ${price.spotLastPrice}` : "",
-    price.contractLastPrice ? `Contract ${price.contractLastPrice}` : "",
-    price.indexPrice ? `Index ${price.indexPrice}` : "",
-    price.markPrice ? `Mark ${price.markPrice}` : ""
-  ].filter(Boolean);
-}
-
 function formatWeight(weight?: string) {
   const numeric = Number(weight);
   if (!Number.isFinite(numeric)) {
@@ -421,7 +409,7 @@ export function App() {
             <span>Exchange</span>
             <span>Spot</span>
             <span>Contract</span>
-            <span>Price</span>
+            <span>Components</span>
             <span>Deposit / withdraw chains</span>
             <span>Updated</span>
           </div>
@@ -430,21 +418,21 @@ export function App() {
           ) : (
             rows.map((row) => (
               <article className="table-row" key={row.exchange.id}>
-                <div>
+                <div className="exchange-cell">
                   <strong>{row.exchange.name}</strong>
                   <small>{row.source}</small>
+                  <div className="price-tags">
+                    {row.price?.spotLastPrice ? <span className="price-tag price-tag-spot">Spot {row.price.spotLastPrice}</span> : null}
+                    {row.price?.contractLastPrice ? (
+                      <span className="price-tag price-tag-contract">Contract {row.price.contractLastPrice}</span>
+                    ) : null}
+                  </div>
                 </div>
                 <StatusBadge status={row.spot} />
                 <StatusBadge status={row.contract} />
-                <div className="prices">
-                  <small>{row.price?.quote ?? "USDT"}</small>
-                  {priceLines(row.price).length === 0 ? (
-                    <span className="muted">Price unavailable</span>
-                  ) : (
-                    priceLines(row.price).map((line) => <span key={line}>{line}</span>)
-                  )}
+                <div className="components-cell">
                   {row.price?.indexComponents.length ? (
-                    <details className="index-components" open>
+                    <details className="index-components">
                       <summary>Components {row.price.indexComponents.length}</summary>
                       {row.price.indexComponents.map((component) => (
                         <div className="index-component" key={`${component.exchange}-${component.symbol ?? ""}`}>
