@@ -124,6 +124,15 @@ describe("exchange adapters", () => {
         if (url.includes("/fapi/v1/premiumIndex")) {
           return { symbol: "SOLUSDT", indexPrice: "81.12", markPrice: "81.07" };
         }
+        if (url.includes("/fapi/v1/constituents")) {
+          return {
+            symbol: "SOLUSDT",
+            constituents: [
+              { exchange: "binance", symbol: "SOLUSDT", price: "81.17", weight: "0.45" },
+              { exchange: "okex", symbol: "SOL-USDT", price: "81.16", weight: "0.13" }
+            ]
+          };
+        }
         expect(url).toContain("/sapi/v1/capital/config/getall?");
         expect(url).toContain("signature=");
         return [
@@ -157,6 +166,11 @@ describe("exchange adapters", () => {
       indexPrice: "81.12",
       markPrice: "81.07",
       source: "public",
+      indexComponentSource: "public",
+      indexComponents: [
+        { exchange: "binance", symbol: "SOLUSDT", price: "81.17", weight: "0.45" },
+        { exchange: "okex", symbol: "SOL-USDT", price: "81.16", weight: "0.13" }
+      ],
       warnings: []
     });
     expect(result.chains).toEqual([
@@ -251,6 +265,17 @@ describe("exchange adapters", () => {
         if (url.includes("/api/v5/public/mark-price")) {
           return { code: "0", data: [{ instId: "SOL-USDT-SWAP", markPx: "81.07" }] };
         }
+        if (url.includes("/api/v5/market/index-components")) {
+          return {
+            code: "0",
+            data: {
+              components: [
+                { exch: "OKX", symbol: "SOL/USDT", symPx: "81.12", wgt: "0.25" },
+                { exch: "Binance", symbol: "SOL/USDT", symPx: "81.12", wgt: "0.25" }
+              ]
+            }
+          };
+        }
         if (url.includes("instType=SPOT")) {
           return { code: "0", data: [{ instId: "SOL-USDT", state: "live" }] };
         }
@@ -277,7 +302,12 @@ describe("exchange adapters", () => {
       contractLastPrice: "81.09",
       indexPrice: "80.99",
       markPrice: "81.07",
-      source: "public"
+      source: "public",
+      indexComponentSource: "public",
+      indexComponents: [
+        { exchange: "OKX", symbol: "SOL/USDT", price: "81.12", weight: "0.25" },
+        { exchange: "Binance", symbol: "SOL/USDT", price: "81.12", weight: "0.25" }
+      ]
     });
     expect(result.chains).toEqual([
       { chain: "SOL-SOLANA", rawChain: "SOL-Solana", deposit: "enabled", withdraw: "disabled", withdrawFee: "0.01", withdrawMin: "0.2" }

@@ -1,6 +1,6 @@
 import type { ExchangeAdapter } from "./types.js";
 import type { JsonHttpClient } from "../httpClient.js";
-import type { ChainFundingStatus, ExchangePriceStatus, SearchInput } from "@status-monitor/shared";
+import type { ChainFundingStatus, ExchangeIndexComponent, ExchangePriceStatus, SearchInput } from "@status-monitor/shared";
 import { createOkxAuthHeaders } from "../signing.js";
 import { asArray, authRequiredChain, firstDataRecord, objectRecord, priceResult, statusResult, stringValue, supportedWhen, unavailablePrice } from "./utils.js";
 
@@ -14,18 +14,29 @@ function okxMarketSupported(payload: unknown, instId: string): boolean {
 }
 
 async function okxPrice(client: JsonHttpClient, coin: string, spotId: string, swapId: string): Promise<ExchangePriceStatus> {
-  const [spot, swap, index, mark] = await Promise.all([
+  const [spot, swap, index, mark, components] = await Promise.all([
     client.getJson(`https://www.okx.com/api/v5/market/ticker?instId=${spotId}`).catch(() => undefined),
     client.getJson(`https://www.okx.com/api/v5/market/ticker?instId=${swapId}`).catch(() => undefined),
     client.getJson(`https://www.okx.com/api/v5/market/index-tickers?instId=${coin}-USD`).catch(() => undefined),
-    client.getJson(`https://www.okx.com/api/v5/public/mark-price?instType=SWAP&instId=${swapId}`).catch(() => undefined)
+    client.getJson(`https://www.okx.com/api/v5/public/mark-price?instType=SWAP&instId=${swapId}`).catch(() => undefined),
+    client.getJson(`https://www.okx.com/api/v5/market/index-components?index=${spotId}`).catch(() => undefined)
   ]);
+  const indexComponents = asArray(objectRecord(objectRecord(components).data).components).map((item): ExchangeIndexComponent => {
+    const row = objectRecord(item);
+    return {
+      exchange: String(row.exch ?? "unknown"),
+      symbol: stringValue(row.symbol),
+      price: stringValue(row.cnvPx ?? row.symPx),
+      weight: stringValue(row.wgt)
+    };
+  });
   const price = priceResult({
     quote: "USDT/USD",
     spotLastPrice: stringValue(firstDataRecord(spot).last),
     contractLastPrice: stringValue(firstDataRecord(swap).last),
     indexPrice: stringValue(firstDataRecord(index).idxPx),
-    markPrice: stringValue(firstDataRecord(mark).markPx)
+    markPrice: stringValue(firstDataRecord(mark).markPx),
+    indexComponents
   });
 
   return price.source === "public" ? price : unavailablePrice("USDT/USD", ["OKX public price endpoints are unavailable."]);

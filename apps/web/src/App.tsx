@@ -98,6 +98,14 @@ function priceLines(price?: ExchangePriceStatus) {
   ].filter(Boolean);
 }
 
+function formatWeight(weight?: string) {
+  const numeric = Number(weight);
+  if (!Number.isFinite(numeric)) {
+    return weight ?? "";
+  }
+  return `${(numeric <= 1 ? numeric * 100 : numeric).toFixed(2)}%`;
+}
+
 function summary(response: SearchResponse | null) {
   const rows = response?.results ?? [];
   return {
@@ -435,6 +443,20 @@ export function App() {
                   ) : (
                     priceLines(row.price).map((line) => <span key={line}>{line}</span>)
                   )}
+                  {row.price?.indexComponents.length ? (
+                    <details className="index-components" open>
+                      <summary>Components {row.price.indexComponents.length}</summary>
+                      {row.price.indexComponents.map((component) => (
+                        <div className="index-component" key={`${component.exchange}-${component.symbol ?? ""}`}>
+                          <span>{component.exchange} {component.symbol ?? ""}</span>
+                          {component.price ? <small>{component.price}</small> : null}
+                          {component.weight ? <b>{formatWeight(component.weight)}</b> : null}
+                        </div>
+                      ))}
+                    </details>
+                  ) : row.price?.indexComponentSource === "unavailable" ? (
+                    <small className="muted">Components unavailable</small>
+                  ) : null}
                 </div>
                 <div className="chains">
                   {row.chains.length === 0 ? (

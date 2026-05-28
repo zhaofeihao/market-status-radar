@@ -9,7 +9,7 @@ function status(exchangeId: string, coin: string): ExchangeCoinStatus {
     coin,
     spot: "supported",
     contract: "unsupported",
-    price: { quote: "USDT", source: "unavailable", warnings: [] },
+    price: { quote: "USDT", source: "unavailable", indexComponentSource: "unavailable", indexComponents: [], warnings: [] },
     chains: [],
     source: "public",
     warnings: [],

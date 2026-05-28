@@ -1,4 +1,12 @@
-import type { ChainFundingStatus, ExchangeCoinStatus, ExchangePriceStatus, FundingStatus, SupportStatus } from "@status-monitor/shared";
+import type {
+  ChainFundingStatus,
+  DataSource,
+  ExchangeCoinStatus,
+  ExchangeIndexComponent,
+  ExchangePriceStatus,
+  FundingStatus,
+  SupportStatus
+} from "@status-monitor/shared";
 import type { JsonHttpClient } from "../httpClient.js";
 
 export interface AdapterContext {
@@ -31,14 +39,22 @@ export function unknownFundingChain(): ChainFundingStatus {
 }
 
 export function unavailablePrice(quote = "USDT", warnings: string[] = []): ExchangePriceStatus {
-  return { quote, source: "unavailable", warnings };
+  return { quote, source: "unavailable", indexComponentSource: "unavailable", indexComponents: [], warnings };
 }
 
-export function priceResult(input: Omit<ExchangePriceStatus, "source" | "warnings"> & { warnings?: string[] }): ExchangePriceStatus {
+export function priceResult(
+  input: Omit<ExchangePriceStatus, "source" | "warnings" | "indexComponentSource" | "indexComponents"> & {
+    indexComponentSource?: DataSource;
+    indexComponents?: ExchangeIndexComponent[];
+    warnings?: string[];
+  }
+): ExchangePriceStatus {
   const hasPrice = Boolean(input.spotLastPrice || input.contractLastPrice || input.indexPrice || input.markPrice);
   return {
     ...input,
     source: hasPrice ? "public" : "unavailable",
+    indexComponentSource: input.indexComponentSource ?? (input.indexComponents?.length ? "public" : "unavailable"),
+    indexComponents: input.indexComponents ?? [],
     warnings: input.warnings ?? []
   };
 }

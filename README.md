@@ -48,6 +48,14 @@ curl 'http://localhost:4000/api/search?coin=SOL'
 
 Each exchange result includes a `price` object. Price fields are public-only and may include `spotLastPrice`, `contractLastPrice`, `indexPrice`, and `markPrice` depending on what the exchange exposes for that symbol.
 
+When an exchange exposes contract index components, the same `price` object includes:
+
+- `indexComponentSource`
+- `indexComponents[].exchange`
+- `indexComponents[].symbol`
+- `indexComponents[].price`
+- `indexComponents[].weight`
+
 ## PM2
 
 Build first, then start the backend with PM2:
@@ -87,6 +95,11 @@ Current expected caveats:
 The UI intentionally does not infer deposit or withdrawal support unless an exchange response explicitly says so.
 
 Price endpoint failures are isolated from trading and funding status. If price data is unavailable for one exchange, that row still returns market and funding status with `price.source` set to `unavailable`.
+
+Index component support is public API based:
+
+- Binance, OKX, Gate.io, and Bitget expose component endpoints that can include source exchange, source pair, component price, and weight.
+- Bybit, Kraken, and HTX are shown as component-unavailable in this version because a direct public component-weight API is not integrated.
 
 ## Browser-Local API Keys
 

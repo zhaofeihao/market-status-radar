@@ -1,21 +1,33 @@
 import type { ExchangeAdapter } from "./types.js";
 import type { JsonHttpClient } from "../httpClient.js";
-import type { ExchangePriceStatus } from "@status-monitor/shared";
+import type { ExchangeIndexComponent, ExchangePriceStatus } from "@status-monitor/shared";
 import { asArray, boolFunding, objectRecord, priceResult, statusResult, stringValue, supportedWhen, unavailablePrice } from "./utils.js";
 
 async function gatePrice(client: JsonHttpClient, pair: string): Promise<ExchangePriceStatus> {
-  const [spot, futures] = await Promise.all([
+  const [spot, futures, constituents] = await Promise.all([
     client.getJson(`https://api.gateio.ws/api/v4/spot/tickers?currency_pair=${pair}`).catch(() => undefined),
-    client.getJson(`https://api.gateio.ws/api/v4/futures/usdt/tickers?contract=${pair}`).catch(() => undefined)
+    client.getJson(`https://api.gateio.ws/api/v4/futures/usdt/tickers?contract=${pair}`).catch(() => undefined),
+    client.getJson(`https://api.gateio.ws/api/v4/futures/usdt/index_constituents/${pair}`).catch(() => undefined)
   ]);
   const spotRow = objectRecord(asArray(spot)[0]);
   const futuresRow = objectRecord(asArray(futures)[0]);
+  const componentRows = asArray(constituents).length > 0 ? asArray(constituents) : asArray(objectRecord(constituents).constituents);
+  const indexComponents = componentRows.map((item): ExchangeIndexComponent => {
+    const row = objectRecord(item);
+    return {
+      exchange: String(row.exchange ?? row.name ?? "unknown"),
+      symbol: stringValue(row.symbol ?? row.pair),
+      price: stringValue(row.price),
+      weight: stringValue(row.weight)
+    };
+  });
   const price = priceResult({
     quote: "USDT",
     spotLastPrice: stringValue(spotRow.last),
     contractLastPrice: stringValue(futuresRow.last),
     indexPrice: stringValue(futuresRow.index_price),
-    markPrice: stringValue(futuresRow.mark_price)
+    markPrice: stringValue(futuresRow.mark_price),
+    indexComponents
   });
 
   return price.source === "public" ? price : unavailablePrice("USDT", ["Gate.io public price endpoints are unavailable."]);

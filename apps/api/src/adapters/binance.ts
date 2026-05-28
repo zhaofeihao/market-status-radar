@@ -1,6 +1,6 @@
 import type { ExchangeAdapter } from "./types.js";
 import { HttpError, type JsonHttpClient } from "../httpClient.js";
-import type { ChainFundingStatus, ExchangePriceStatus, SearchInput } from "@status-monitor/shared";
+import type { ChainFundingStatus, ExchangeIndexComponent, ExchangePriceStatus, SearchInput } from "@status-monitor/shared";
 import { createBinanceSignedQuery } from "../signing.js";
 import { authRequiredChain, asArray, objectRecord, priceResult, statusResult, stringValue, supportedWhen, unavailablePrice } from "./utils.js";
 
@@ -48,20 +48,31 @@ async function safeBinanceFutures(client: JsonHttpClient): Promise<unknown> {
 }
 
 async function binancePrice(client: JsonHttpClient, symbol: string): Promise<ExchangePriceStatus> {
-  const [spot, contract, premium] = await Promise.all([
+  const [spot, contract, premium, constituents] = await Promise.all([
     client.getJson(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`).catch(() => undefined),
     client.getJson(`https://fapi.binance.com/fapi/v1/ticker/price?symbol=${symbol}`).catch(() => undefined),
-    client.getJson(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${symbol}`).catch(() => undefined)
+    client.getJson(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${symbol}`).catch(() => undefined),
+    client.getJson(`https://fapi.binance.com/fapi/v1/constituents?symbol=${symbol}`).catch(() => undefined)
   ]);
   const spotRecord = objectRecord(spot);
   const contractRecord = objectRecord(contract);
   const premiumRecord = objectRecord(premium);
+  const indexComponents = asArray(objectRecord(constituents).constituents).map((item): ExchangeIndexComponent => {
+    const row = objectRecord(item);
+    return {
+      exchange: String(row.exchange ?? "unknown"),
+      symbol: stringValue(row.symbol),
+      price: stringValue(row.price),
+      weight: stringValue(row.weight)
+    };
+  });
   const price = priceResult({
     quote: "USDT",
     spotLastPrice: stringValue(spotRecord.price),
     contractLastPrice: stringValue(contractRecord.price),
     indexPrice: stringValue(premiumRecord.indexPrice),
-    markPrice: stringValue(premiumRecord.markPrice)
+    markPrice: stringValue(premiumRecord.markPrice),
+    indexComponents
   });
 
   return price.source === "public" ? price : unavailablePrice("USDT", ["Binance public price endpoints are unavailable."]);

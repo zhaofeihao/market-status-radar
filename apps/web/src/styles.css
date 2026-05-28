@@ -396,6 +396,47 @@ h1 {
   font-weight: 800;
 }
 
+.index-components {
+  margin-top: 4px;
+}
+
+.index-components summary {
+  width: fit-content;
+  border: 1px solid #b8ad9b;
+  background: #f3efe6;
+  padding: 3px 7px;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.index-component {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 3px 8px;
+  margin-top: 6px;
+  border-left: 2px solid #b8ad9b;
+  padding-left: 7px;
+  font-size: 12px;
+}
+
+.index-component span {
+  border: 0;
+  padding: 0;
+  font-size: 12px;
+}
+
+.index-component small {
+  grid-column: 1;
+}
+
+.index-component b {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  font-size: 12px;
+}
+
 .chain {
   display: flex;
   flex-wrap: wrap;

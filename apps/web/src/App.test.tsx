@@ -20,6 +20,11 @@ const response: SearchResponse = {
         indexPrice: "81.12",
         markPrice: "81.07",
         source: "public",
+        indexComponentSource: "public",
+        indexComponents: [
+          { exchange: "BINANCE", symbol: "SOL/USDT", price: "81.17", weight: "0.37" },
+          { exchange: "OKX", symbol: "SOL/USDT", price: "81.19", weight: "0.09" }
+        ],
         warnings: []
       },
       chains: [{ chain: "SOL", deposit: "enabled", withdraw: "disabled", withdrawFee: "0.006" }],
@@ -35,6 +40,8 @@ const response: SearchResponse = {
       price: {
         quote: "USDT",
         source: "unavailable",
+        indexComponentSource: "unavailable",
+        indexComponents: [],
         warnings: ["Binance price endpoints are unavailable."]
       },
       chains: [{ chain: "ALL", deposit: "requires_api_key", withdraw: "requires_api_key" }],
@@ -86,6 +93,9 @@ describe("App", () => {
     expect(screen.getByText("Spot 81.13")).toBeInTheDocument();
     expect(screen.getByText("Index 81.12")).toBeInTheDocument();
     expect(screen.getByText("Mark 81.07")).toBeInTheDocument();
+    expect(screen.getByText("Components 2")).toBeInTheDocument();
+    expect(screen.getByText("BINANCE SOL/USDT")).toBeInTheDocument();
+    expect(screen.getByText("37.00%")).toBeInTheDocument();
     expect(screen.getByText("Withdraw disabled")).toBeInTheDocument();
     expect(screen.getByText("Requires API key")).toBeInTheDocument();
   });
