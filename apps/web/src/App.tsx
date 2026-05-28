@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, KeyRound, RefreshCcw, Save, Search, Trash2, XCircle } from "lucide-react";
-import type { ExchangeCoinStatus, FundingStatus, SearchCredentials, SearchResponse, SupportStatus } from "@status-monitor/shared";
+import type { ExchangeCoinStatus, ExchangePriceStatus, FundingStatus, SearchCredentials, SearchResponse, SupportStatus } from "@status-monitor/shared";
 import { searchCoin } from "./api.js";
 import { clearCredentials, hasCredentials, loadCredentials, saveCredentials } from "./credentials.js";
 
@@ -84,6 +84,18 @@ function formatTime(value?: string) {
     second: "2-digit",
     hour12: false
   }).format(new Date(value));
+}
+
+function priceLines(price?: ExchangePriceStatus) {
+  if (!price || price.source === "unavailable") {
+    return [];
+  }
+  return [
+    price.spotLastPrice ? `Spot ${price.spotLastPrice}` : "",
+    price.contractLastPrice ? `Contract ${price.contractLastPrice}` : "",
+    price.indexPrice ? `Index ${price.indexPrice}` : "",
+    price.markPrice ? `Mark ${price.markPrice}` : ""
+  ].filter(Boolean);
 }
 
 function summary(response: SearchResponse | null) {
@@ -401,6 +413,7 @@ export function App() {
             <span>Exchange</span>
             <span>Spot</span>
             <span>Contract</span>
+            <span>Price</span>
             <span>Deposit / withdraw chains</span>
             <span>Updated</span>
           </div>
@@ -415,6 +428,14 @@ export function App() {
                 </div>
                 <StatusBadge status={row.spot} />
                 <StatusBadge status={row.contract} />
+                <div className="prices">
+                  <small>{row.price?.quote ?? "USDT"}</small>
+                  {priceLines(row.price).length === 0 ? (
+                    <span className="muted">Price unavailable</span>
+                  ) : (
+                    priceLines(row.price).map((line) => <span key={line}>{line}</span>)
+                  )}
+                </div>
                 <div className="chains">
                   {row.chains.length === 0 ? (
                     <span className="muted">No public chain data</span>
@@ -435,6 +456,9 @@ export function App() {
                     ))
                   )}
                   {row.warnings.map((warning) => (
+                    <p className="warning" key={warning}>{warning}</p>
+                  ))}
+                  {row.price?.warnings.map((warning) => (
                     <p className="warning" key={warning}>{warning}</p>
                   ))}
                 </div>

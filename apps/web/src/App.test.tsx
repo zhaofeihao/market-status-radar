@@ -13,6 +13,15 @@ const response: SearchResponse = {
       coin: "SOL",
       spot: "supported",
       contract: "supported",
+      price: {
+        quote: "USDT",
+        spotLastPrice: "81.13",
+        contractLastPrice: "81.08",
+        indexPrice: "81.12",
+        markPrice: "81.07",
+        source: "public",
+        warnings: []
+      },
       chains: [{ chain: "SOL", deposit: "enabled", withdraw: "disabled", withdrawFee: "0.006" }],
       source: "public",
       warnings: [],
@@ -23,6 +32,11 @@ const response: SearchResponse = {
       coin: "SOL",
       spot: "supported",
       contract: "supported",
+      price: {
+        quote: "USDT",
+        source: "unavailable",
+        warnings: ["Binance price endpoints are unavailable."]
+      },
       chains: [{ chain: "ALL", deposit: "requires_api_key", withdraw: "requires_api_key" }],
       source: "mixed",
       warnings: ["Binance deposit and withdrawal status requires signed wallet API access."],
@@ -69,6 +83,9 @@ describe("App", () => {
     await screen.findByText("Bitget");
     expect(fetchMock).toHaveBeenCalledWith("http://localhost:4000/api/search?coin=SOL");
     expect(screen.getByText("2 exchanges")).toBeInTheDocument();
+    expect(screen.getByText("Spot 81.13")).toBeInTheDocument();
+    expect(screen.getByText("Index 81.12")).toBeInTheDocument();
+    expect(screen.getByText("Mark 81.07")).toBeInTheDocument();
     expect(screen.getByText("Withdraw disabled")).toBeInTheDocument();
     expect(screen.getByText("Requires API key")).toBeInTheDocument();
   });

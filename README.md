@@ -1,6 +1,6 @@
 # Exchange Deposit / Withdraw Status Monitor
 
-Local React + TypeScript app for checking whether a coin is supported for spot and contract trading, and whether deposit / withdrawal status is available across selected exchanges.
+Local React + TypeScript app for checking whether a coin is supported for spot and contract trading, whether deposit / withdrawal status is available, and what public spot / contract / index / mark prices are available across selected exchanges.
 
 Covered exchanges:
 
@@ -46,6 +46,8 @@ Search endpoint:
 curl 'http://localhost:4000/api/search?coin=SOL'
 ```
 
+Each exchange result includes a `price` object. Price fields are public-only and may include `spotLastPrice`, `contractLastPrice`, `indexPrice`, and `markPrice` depending on what the exchange exposes for that symbol.
+
 ## PM2
 
 Build first, then start the backend with PM2:
@@ -83,6 +85,8 @@ Current expected caveats:
 - Kraken public asset status is available, but detailed deposit and withdrawal methods require private API access.
 
 The UI intentionally does not infer deposit or withdrawal support unless an exchange response explicitly says so.
+
+Price endpoint failures are isolated from trading and funding status. If price data is unavailable for one exchange, that row still returns market and funding status with `price.source` set to `unavailable`.
 
 ## Browser-Local API Keys
 

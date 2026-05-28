@@ -1,8 +1,8 @@
 import type { ExchangeAdapter } from "./types.js";
 import { HttpError, type JsonHttpClient } from "../httpClient.js";
-import type { ChainFundingStatus, SearchInput } from "@status-monitor/shared";
+import type { ChainFundingStatus, ExchangePriceStatus, SearchInput } from "@status-monitor/shared";
 import { createBinanceSignedQuery } from "../signing.js";
-import { authRequiredChain, asArray, objectRecord, statusResult, supportedWhen } from "./utils.js";
+import { authRequiredChain, asArray, objectRecord, priceResult, statusResult, stringValue, supportedWhen, unavailablePrice } from "./utils.js";
 
 function hasBinanceCredentials(input: SearchInput) {
   return Boolean(input.credentials?.binance?.apiKey && input.credentials.binance.apiSecret);
@@ -47,6 +47,26 @@ async function safeBinanceFutures(client: JsonHttpClient): Promise<unknown> {
   }
 }
 
+async function binancePrice(client: JsonHttpClient, symbol: string): Promise<ExchangePriceStatus> {
+  const [spot, contract, premium] = await Promise.all([
+    client.getJson(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`).catch(() => undefined),
+    client.getJson(`https://fapi.binance.com/fapi/v1/ticker/price?symbol=${symbol}`).catch(() => undefined),
+    client.getJson(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${symbol}`).catch(() => undefined)
+  ]);
+  const spotRecord = objectRecord(spot);
+  const contractRecord = objectRecord(contract);
+  const premiumRecord = objectRecord(premium);
+  const price = priceResult({
+    quote: "USDT",
+    spotLastPrice: stringValue(spotRecord.price),
+    contractLastPrice: stringValue(contractRecord.price),
+    indexPrice: stringValue(premiumRecord.indexPrice),
+    markPrice: stringValue(premiumRecord.markPrice)
+  });
+
+  return price.source === "public" ? price : unavailablePrice("USDT", ["Binance public price endpoints are unavailable."]);
+}
+
 export function createBinanceAdapter(client: JsonHttpClient): ExchangeAdapter {
   return {
     id: "binance",
@@ -67,10 +87,11 @@ export function createBinanceAdapter(client: JsonHttpClient): ExchangeAdapter {
             return undefined;
           })
         : Promise.resolve(undefined);
-      const [spot, futures, funding] = await Promise.all([
+      const [spot, futures, funding, price] = await Promise.all([
         safeBinanceSpot(client, symbol),
         safeBinanceFutures(client),
-        fundingPromise
+        fundingPromise,
+        binancePrice(client, symbol)
       ]);
 
       const spotSymbols = asArray(objectRecord(spot).symbols);
@@ -83,6 +104,7 @@ export function createBinanceAdapter(client: JsonHttpClient): ExchangeAdapter {
         contract: supportedWhen(
           futuresSymbols.some((item) => objectRecord(item).symbol === symbol && objectRecord(item).status === "TRADING")
         ),
+        price,
         chains: funding ? mapBinanceChains(funding, coin) : [authRequiredChain()],
         source: funding ? "api_key" : "mixed",
         warnings: funding

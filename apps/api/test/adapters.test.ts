@@ -115,6 +115,15 @@ describe("exchange adapters", () => {
         if (url.includes("/fapi/v1/exchangeInfo")) {
           return { symbols: [{ symbol: "SOLUSDT", status: "TRADING" }] };
         }
+        if (url.includes("/api/v3/ticker/price")) {
+          return { symbol: "SOLUSDT", price: "81.13" };
+        }
+        if (url.includes("/fapi/v1/ticker/price")) {
+          return { symbol: "SOLUSDT", price: "81.08" };
+        }
+        if (url.includes("/fapi/v1/premiumIndex")) {
+          return { symbol: "SOLUSDT", indexPrice: "81.12", markPrice: "81.07" };
+        }
         expect(url).toContain("/sapi/v1/capital/config/getall?");
         expect(url).toContain("signature=");
         return [
@@ -141,6 +150,15 @@ describe("exchange adapters", () => {
 
     expect(seenHeaders).toContainEqual({ "X-MBX-APIKEY": "binance-key" });
     expect(result.source).toBe("api_key");
+    expect(result.price).toEqual({
+      quote: "USDT",
+      spotLastPrice: "81.13",
+      contractLastPrice: "81.08",
+      indexPrice: "81.12",
+      markPrice: "81.07",
+      source: "public",
+      warnings: []
+    });
     expect(result.chains).toEqual([
       { chain: "SOL", rawChain: "SOL", deposit: "enabled", withdraw: "disabled", withdrawFee: "0.006", withdrawMin: "0.1" }
     ]);
@@ -221,6 +239,18 @@ describe("exchange adapters", () => {
   it("maps OKX signed funding data when credentials are provided", async () => {
     const adapter = createOkxAdapter(
       fakeClient((url, headers) => {
+        if (url.includes("/api/v5/market/ticker?instId=SOL-USDT-SWAP")) {
+          return { code: "0", data: [{ instId: "SOL-USDT-SWAP", last: "81.09" }] };
+        }
+        if (url.includes("/api/v5/market/ticker?instId=SOL-USDT")) {
+          return { code: "0", data: [{ instId: "SOL-USDT", last: "81.14" }] };
+        }
+        if (url.includes("/api/v5/market/index-tickers")) {
+          return { code: "0", data: [{ instId: "SOL-USD", idxPx: "80.99" }] };
+        }
+        if (url.includes("/api/v5/public/mark-price")) {
+          return { code: "0", data: [{ instId: "SOL-USDT-SWAP", markPx: "81.07" }] };
+        }
         if (url.includes("instType=SPOT")) {
           return { code: "0", data: [{ instId: "SOL-USDT", state: "live" }] };
         }
@@ -241,6 +271,14 @@ describe("exchange adapters", () => {
     });
 
     expect(result.source).toBe("api_key");
+    expect(result.price).toMatchObject({
+      quote: "USDT/USD",
+      spotLastPrice: "81.14",
+      contractLastPrice: "81.09",
+      indexPrice: "80.99",
+      markPrice: "81.07",
+      source: "public"
+    });
     expect(result.chains).toEqual([
       { chain: "SOL-SOLANA", rawChain: "SOL-Solana", deposit: "enabled", withdraw: "disabled", withdrawFee: "0.01", withdrawMin: "0.2" }
     ]);

@@ -1,6 +1,25 @@
 import type { ExchangeAdapter } from "./types.js";
 import type { JsonHttpClient } from "../httpClient.js";
-import { asArray, boolFunding, objectRecord, statusResult, supportedWhen } from "./utils.js";
+import type { ExchangePriceStatus } from "@status-monitor/shared";
+import { asArray, boolFunding, firstDataRecord, objectRecord, priceResult, statusResult, stringValue, supportedWhen, unavailablePrice } from "./utils.js";
+
+async function bitgetPrice(client: JsonHttpClient, symbol: string): Promise<ExchangePriceStatus> {
+  const [spot, contract] = await Promise.all([
+    client.getJson(`https://api.bitget.com/api/v2/spot/market/tickers?symbol=${symbol}`).catch(() => undefined),
+    client.getJson(`https://api.bitget.com/api/v2/mix/market/symbol-price?symbol=${symbol}&productType=USDT-FUTURES`).catch(() => undefined)
+  ]);
+  const spotRow = firstDataRecord(spot);
+  const contractRow = firstDataRecord(contract);
+  const price = priceResult({
+    quote: "USDT",
+    spotLastPrice: stringValue(spotRow.lastPr),
+    contractLastPrice: stringValue(contractRow.price),
+    indexPrice: stringValue(contractRow.indexPrice),
+    markPrice: stringValue(contractRow.markPrice)
+  });
+
+  return price.source === "public" ? price : unavailablePrice("USDT", ["Bitget public price endpoints are unavailable."]);
+}
 
 export function createBitgetAdapter(client: JsonHttpClient): ExchangeAdapter {
   return {
@@ -8,10 +27,11 @@ export function createBitgetAdapter(client: JsonHttpClient): ExchangeAdapter {
     name: "Bitget",
     async searchCoin({ coin }) {
       const symbol = `${coin}USDT`;
-      const [spot, contracts, funding] = await Promise.all([
+      const [spot, contracts, funding, price] = await Promise.all([
         client.getJson(`https://api.bitget.com/api/v2/spot/public/symbols?symbol=${symbol}`),
         client.getJson("https://api.bitget.com/api/v2/mix/market/contracts?productType=USDT-FUTURES"),
-        client.getJson(`https://api.bitget.com/api/v2/spot/public/coins?coin=${coin}`)
+        client.getJson(`https://api.bitget.com/api/v2/spot/public/coins?coin=${coin}`),
+        bitgetPrice(client, symbol)
       ]);
 
       const spotRows = asArray(objectRecord(spot).data);
@@ -40,6 +60,7 @@ export function createBitgetAdapter(client: JsonHttpClient): ExchangeAdapter {
         contract: supportedWhen(
           contractRows.some((item) => objectRecord(item).symbol === symbol && String(objectRecord(item).symbolStatus ?? "normal") !== "off")
         ),
+        price,
         chains: chainRows,
         source: "public",
         warnings: []

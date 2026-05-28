@@ -300,13 +300,13 @@ h1 {
 }
 
 .result-table {
-  min-width: 1040px;
+  min-width: 1220px;
 }
 
 .table-head,
 .table-row {
   display: grid;
-  grid-template-columns: 1.1fr 0.8fr 0.8fr 2.4fr 0.8fr;
+  grid-template-columns: 1.05fr 0.72fr 0.72fr 1.2fr 2.1fr 0.72fr;
   gap: 14px;
   align-items: start;
 }
@@ -380,6 +380,20 @@ h1 {
 .chains {
   display: grid;
   gap: 8px;
+}
+
+.prices {
+  display: grid;
+  gap: 5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.prices span {
+  width: fit-content;
+  border-left: 3px solid #d2e25f;
+  padding-left: 7px;
+  font-size: 13px;
+  font-weight: 800;
 }
 
 .chain {

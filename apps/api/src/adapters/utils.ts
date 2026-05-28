@@ -1,4 +1,4 @@
-import type { ChainFundingStatus, ExchangeCoinStatus, FundingStatus, SupportStatus } from "@status-monitor/shared";
+import type { ChainFundingStatus, ExchangeCoinStatus, ExchangePriceStatus, FundingStatus, SupportStatus } from "@status-monitor/shared";
 import type { JsonHttpClient } from "../httpClient.js";
 
 export interface AdapterContext {
@@ -30,6 +30,26 @@ export function unknownFundingChain(): ChainFundingStatus {
   return { chain: "ALL", deposit: "unknown", withdraw: "unknown" };
 }
 
+export function unavailablePrice(quote = "USDT", warnings: string[] = []): ExchangePriceStatus {
+  return { quote, source: "unavailable", warnings };
+}
+
+export function priceResult(input: Omit<ExchangePriceStatus, "source" | "warnings"> & { warnings?: string[] }): ExchangePriceStatus {
+  const hasPrice = Boolean(input.spotLastPrice || input.contractLastPrice || input.indexPrice || input.markPrice);
+  return {
+    ...input,
+    source: hasPrice ? "public" : "unavailable",
+    warnings: input.warnings ?? []
+  };
+}
+
+export function stringValue(value: unknown): string | undefined {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+  return String(value);
+}
+
 export function statusResult(input: Omit<ExchangeCoinStatus, "updatedAt">): ExchangeCoinStatus {
   return {
     ...input,
@@ -43,4 +63,8 @@ export function asArray(value: unknown): unknown[] {
 
 export function objectRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
+export function firstDataRecord(payload: unknown): Record<string, unknown> {
+  return objectRecord(asArray(objectRecord(payload).data)[0]);
 }

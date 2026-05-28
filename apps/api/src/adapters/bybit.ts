@@ -1,8 +1,8 @@
-import type { ChainFundingStatus, SearchInput } from "@status-monitor/shared";
+import type { ChainFundingStatus, ExchangePriceStatus, SearchInput } from "@status-monitor/shared";
 import type { ExchangeAdapter } from "./types.js";
 import type { JsonHttpClient } from "../httpClient.js";
 import { createBybitAuthHeaders } from "../signing.js";
-import { asArray, authRequiredChain, objectRecord, statusResult, supportedWhen } from "./utils.js";
+import { asArray, authRequiredChain, objectRecord, priceResult, statusResult, stringValue, supportedWhen, unavailablePrice } from "./utils.js";
 
 function bybitList(payload: unknown): unknown[] {
   return asArray(objectRecord(objectRecord(payload).result).list);
@@ -36,6 +36,24 @@ function bybitFundingStatus(value: unknown) {
   return "unknown" as const;
 }
 
+async function bybitPrice(client: JsonHttpClient, symbol: string): Promise<ExchangePriceStatus> {
+  const [spot, linear] = await Promise.all([
+    client.getJson(`https://api.bybit.com/v5/market/tickers?category=spot&symbol=${symbol}`).catch(() => undefined),
+    client.getJson(`https://api.bybit.com/v5/market/tickers?category=linear&symbol=${symbol}`).catch(() => undefined)
+  ]);
+  const spotRow = objectRecord(bybitList(spot)[0]);
+  const linearRow = objectRecord(bybitList(linear)[0]);
+  const price = priceResult({
+    quote: "USDT",
+    spotLastPrice: stringValue(spotRow.lastPrice),
+    contractLastPrice: stringValue(linearRow.lastPrice),
+    indexPrice: stringValue(linearRow.indexPrice ?? spotRow.usdIndexPrice),
+    markPrice: stringValue(linearRow.markPrice)
+  });
+
+  return price.source === "public" ? price : unavailablePrice("USDT", ["Bybit public price endpoints are unavailable."]);
+}
+
 export function createBybitAdapter(client: JsonHttpClient): ExchangeAdapter {
   return {
     id: "bybit",
@@ -55,10 +73,11 @@ export function createBybitAdapter(client: JsonHttpClient): ExchangeAdapter {
             })
           })
         : client.getJson(`https://api.bybit.com/v5/asset/coin/query-info?${fundingQuery}`);
-      const [spot, linear, funding] = await Promise.all([
+      const [spot, linear, funding, price] = await Promise.all([
         client.getJson(`https://api.bybit.com/v5/market/instruments-info?category=spot&symbol=${symbol}`),
         client.getJson(`https://api.bybit.com/v5/market/instruments-info?category=linear&symbol=${symbol}`),
-        fundingRequest
+        fundingRequest,
+        bybitPrice(client, symbol)
       ]);
 
       const fundingRecord = objectRecord(funding);
@@ -85,6 +104,7 @@ export function createBybitAdapter(client: JsonHttpClient): ExchangeAdapter {
         contract: supportedWhen(
           bybitList(linear).some((item) => objectRecord(item).symbol === symbol && objectRecord(item).status === "Trading")
         ),
+        price,
         chains,
         source: retCode === 0 ? (bybitCredentialsComplete(input) ? "api_key" : "public") : "mixed",
         warnings: retCode === 0 ? [] : ["Bybit coin chain funding status requires API credentials in this environment."]

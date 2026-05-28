@@ -1,8 +1,8 @@
 import type { ExchangeAdapter } from "./types.js";
 import type { JsonHttpClient } from "../httpClient.js";
-import type { ChainFundingStatus, SearchInput } from "@status-monitor/shared";
+import type { ChainFundingStatus, ExchangePriceStatus, SearchInput } from "@status-monitor/shared";
 import { createOkxAuthHeaders } from "../signing.js";
-import { asArray, authRequiredChain, objectRecord, statusResult, supportedWhen } from "./utils.js";
+import { asArray, authRequiredChain, firstDataRecord, objectRecord, priceResult, statusResult, stringValue, supportedWhen, unavailablePrice } from "./utils.js";
 
 function okxMarketSupported(payload: unknown, instId: string): boolean {
   const data = asArray(objectRecord(payload).data);
@@ -11,6 +11,24 @@ function okxMarketSupported(payload: unknown, instId: string): boolean {
     const state = String(row.state ?? "live").toLowerCase();
     return row.instId === instId && state !== "suspend" && state !== "offline";
   });
+}
+
+async function okxPrice(client: JsonHttpClient, coin: string, spotId: string, swapId: string): Promise<ExchangePriceStatus> {
+  const [spot, swap, index, mark] = await Promise.all([
+    client.getJson(`https://www.okx.com/api/v5/market/ticker?instId=${spotId}`).catch(() => undefined),
+    client.getJson(`https://www.okx.com/api/v5/market/ticker?instId=${swapId}`).catch(() => undefined),
+    client.getJson(`https://www.okx.com/api/v5/market/index-tickers?instId=${coin}-USD`).catch(() => undefined),
+    client.getJson(`https://www.okx.com/api/v5/public/mark-price?instType=SWAP&instId=${swapId}`).catch(() => undefined)
+  ]);
+  const price = priceResult({
+    quote: "USDT/USD",
+    spotLastPrice: stringValue(firstDataRecord(spot).last),
+    contractLastPrice: stringValue(firstDataRecord(swap).last),
+    indexPrice: stringValue(firstDataRecord(index).idxPx),
+    markPrice: stringValue(firstDataRecord(mark).markPx)
+  });
+
+  return price.source === "public" ? price : unavailablePrice("USDT/USD", ["OKX public price endpoints are unavailable."]);
 }
 
 export function createOkxAdapter(client: JsonHttpClient): ExchangeAdapter {
@@ -38,10 +56,11 @@ export function createOkxAdapter(client: JsonHttpClient): ExchangeAdapter {
         : client.getJson(`https://www.okx.com${fundingPath}`).catch(() => ({
             code: "requires_api_key"
           }));
-      const [spot, swap, funding] = await Promise.all([
+      const [spot, swap, funding, price] = await Promise.all([
         client.getJson(`https://www.okx.com/api/v5/public/instruments?instType=SPOT&instId=${spotId}`),
         client.getJson(`https://www.okx.com/api/v5/public/instruments?instType=SWAP&instId=${swapId}`),
-        fundingRequest
+        fundingRequest,
+        okxPrice(client, coin, spotId, swapId)
       ]);
 
       const fundingRecord = objectRecord(funding);
@@ -66,6 +85,7 @@ export function createOkxAdapter(client: JsonHttpClient): ExchangeAdapter {
         coin,
         spot: supportedWhen(okxMarketSupported(spot, spotId)),
         contract: supportedWhen(okxMarketSupported(swap, swapId)),
+        price,
         chains,
         source: fundingCode === "0" ? (okxCredentialsComplete(input) ? "api_key" : "public") : "mixed",
         warnings: fundingCode === "0" ? [] : [fundingWarning || "OKX funding currency endpoint requires API credentials in this environment."]

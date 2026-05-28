@@ -42,11 +42,22 @@ export interface ChainFundingStatus {
   withdrawMin?: string;
 }
 
+export interface ExchangePriceStatus {
+  quote: string;
+  spotLastPrice?: string;
+  contractLastPrice?: string;
+  indexPrice?: string;
+  markPrice?: string;
+  source: DataSource;
+  warnings: string[];
+}
+
 export interface ExchangeCoinStatus {
   exchange: ExchangeIdentity;
   coin: string;
   spot: SupportStatus;
   contract: SupportStatus;
+  price: ExchangePriceStatus;
   chains: ChainFundingStatus[];
   source: DataSource;
   warnings: string[];
@@ -74,6 +85,7 @@ export function createErrorStatus(
     coin: normalizeCoin(coin),
     spot: "error",
     contract: "error",
+    price: { quote: "USDT", source: "unavailable", warnings: [message] },
     chains: [],
     source: "unavailable",
     warnings: [message],
