@@ -90,8 +90,10 @@ describe("App", () => {
     await screen.findByText("Bitget");
     expect(fetchMock).toHaveBeenCalledWith("http://localhost:4000/api/search?coin=SOL");
     expect(screen.getByText("2 exchanges")).toBeInTheDocument();
-    expect(screen.getByText("Spot 81.13")).toBeInTheDocument();
-    expect(screen.getByText("Contract 81.08")).toBeInTheDocument();
+    expect(screen.getByText("81.13")).toBeInTheDocument();
+    expect(screen.getByText("81.08")).toBeInTheDocument();
+    expect(screen.queryByText("Spot 81.13")).not.toBeInTheDocument();
+    expect(screen.queryByText("Contract 81.08")).not.toBeInTheDocument();
     expect(screen.queryByText("Index 81.12")).not.toBeInTheDocument();
     expect(screen.queryByText("Mark 81.07")).not.toBeInTheDocument();
     expect(screen.queryByText("Price")).not.toBeInTheDocument();

@@ -422,9 +422,9 @@ export function App() {
                   <strong>{row.exchange.name}</strong>
                   <small>{row.source}</small>
                   <div className="price-tags">
-                    {row.price?.spotLastPrice ? <span className="price-tag price-tag-spot">Spot {row.price.spotLastPrice}</span> : null}
+                    {row.price?.spotLastPrice ? <span className="price-tag price-tag-spot">{row.price.spotLastPrice}</span> : null}
                     {row.price?.contractLastPrice ? (
-                      <span className="price-tag price-tag-contract">Contract {row.price.contractLastPrice}</span>
+                      <span className="price-tag price-tag-contract">{row.price.contractLastPrice}</span>
                     ) : null}
                   </div>
                 </div>
