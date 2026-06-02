@@ -9,11 +9,20 @@ import { searchTradfiAcrossExchanges } from "./tradfi/searchService.js";
 export interface ServerOptions {
   adapters: ExchangeAdapter[];
   tradfiAdapters?: TradfiMarketAdapter[];
+  allowedOrigins?: string[];
 }
 
 export function createServer(options: ServerOptions) {
   const app = express();
-  app.use(cors());
+  if (options.allowedOrigins?.length) {
+    app.use(
+      cors({
+        origin(origin, callback) {
+          callback(null, !origin || options.allowedOrigins!.includes(origin));
+        }
+      })
+    );
+  }
   app.use(express.json());
 
   app.get("/api/health", (_req, res) => {

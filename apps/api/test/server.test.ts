@@ -58,6 +58,21 @@ describe("createServer", () => {
     await request(createServer({ adapters })).get("/api/health").expect(200, { ok: true });
   });
 
+  it("does not allow arbitrary browser origins by default", async () => {
+    const response = await request(createServer({ adapters })).get("/api/health").set("Origin", "https://evil.example").expect(200);
+
+    expect(response.headers["access-control-allow-origin"]).toBeUndefined();
+  });
+
+  it("allows configured browser origins", async () => {
+    const response = await request(createServer({ adapters, allowedOrigins: ["http://localhost:5173"] }))
+      .get("/api/health")
+      .set("Origin", "http://localhost:5173")
+      .expect(200);
+
+    expect(response.headers["access-control-allow-origin"]).toBe("http://localhost:5173");
+  });
+
   it("lists configured exchanges", async () => {
     const response = await request(createServer({ adapters })).get("/api/exchanges").expect(200);
 

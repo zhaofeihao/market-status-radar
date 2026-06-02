@@ -1,7 +1,7 @@
 import type { SearchCredentials, SearchResponse, TradfiSearchResponse } from "@status-monitor/shared";
 import { hasCredentials, normalizeCredentials } from "./credentials.js";
 
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:4000";
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.PROD ? "" : "http://localhost:4000");
 
 export async function searchCoin(coin: string, credentials: SearchCredentials = {}): Promise<SearchResponse> {
   const normalizedCredentials = normalizeCredentials(credentials);
