@@ -79,8 +79,57 @@ export interface SearchResponse {
   updatedAt: string;
 }
 
+export type TradfiMarketStatus = "supported" | "unsupported" | "error";
+
+export interface TradfiMarketQuote {
+  exchange: ExchangeIdentity;
+  querySymbol: string;
+  contractSymbol: string;
+  status: TradfiMarketStatus;
+  quoteAsset: string;
+  lastPrice?: string;
+  markPrice?: string;
+  indexPrice?: string;
+  bidPrice?: string;
+  askPrice?: string;
+  fundingRate?: string;
+  nextFundingTime?: string;
+  fundingIntervalHours?: string;
+  volume24hBase?: string;
+  volume24hQuote?: string;
+  openInterest?: string;
+  openInterestUsd?: string;
+  source: DataSource;
+  warnings: string[];
+  updatedAt: string;
+}
+
+export interface TradfiSpreadSummary {
+  sourceField: "markPrice" | "lastPrice";
+  lowExchange: string;
+  highExchange: string;
+  lowPrice: string;
+  highPrice: string;
+  absolute: string;
+  percent: string;
+  lowFundingRate?: string;
+  highFundingRate?: string;
+  fundingRateDiff?: string;
+}
+
+export interface TradfiSearchResponse {
+  symbol: string;
+  results: TradfiMarketQuote[];
+  spread?: TradfiSpreadSummary;
+  updatedAt: string;
+}
+
 export function normalizeCoin(input: string): string {
   return input.trim().toUpperCase();
+}
+
+export function normalizeTradfiSymbol(input: string): string {
+  return input.trim().toUpperCase().replace(/[-_/\s]*(USDT|USD|SWAP|PERP)$/u, "");
 }
 
 export function createErrorStatus(
@@ -96,6 +145,24 @@ export function createErrorStatus(
     contract: "error",
     price: { quote: "USDT", source: "unavailable", indexComponentSource: "unavailable", indexComponents: [], warnings: [message] },
     chains: [],
+    source: "unavailable",
+    warnings: [message],
+    updatedAt
+  };
+}
+
+export function createTradfiErrorQuote(
+  exchange: ExchangeIdentity,
+  symbol: string,
+  message: string,
+  updatedAt = new Date().toISOString()
+): TradfiMarketQuote {
+  return {
+    exchange,
+    querySymbol: normalizeTradfiSymbol(symbol),
+    contractSymbol: "",
+    status: "error",
+    quoteAsset: "USDT",
     source: "unavailable",
     warnings: [message],
     updatedAt

@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App.js";
-import type { SearchResponse } from "@status-monitor/shared";
+import type { SearchResponse, TradfiSearchResponse } from "@status-monitor/shared";
 
 const response: SearchResponse = {
   coin: "SOL",
@@ -52,11 +52,75 @@ const response: SearchResponse = {
   ]
 };
 
+const tradfiResponse: TradfiSearchResponse = {
+  symbol: "TSLA",
+  updatedAt: "2026-06-01T00:00:00.000Z",
+  spread: {
+    sourceField: "markPrice",
+    lowExchange: "Bybit",
+    highExchange: "OKX",
+    lowPrice: "436.24",
+    highPrice: "438.42",
+    absolute: "2.18",
+    percent: "0.5000",
+    lowFundingRate: "0",
+    highFundingRate: "0.0001",
+    fundingRateDiff: "0.0001"
+  },
+  results: [
+    {
+      exchange: { id: "bybit", name: "Bybit" },
+      querySymbol: "TSLA",
+      contractSymbol: "TSLAUSDT",
+      status: "supported",
+      quoteAsset: "USDT",
+      lastPrice: "436.24",
+      markPrice: "436.24",
+      indexPrice: "435.86",
+      fundingRate: "0",
+      nextFundingTime: "2026-06-01T08:00:00.000Z",
+      volume24hBase: "415.6900",
+      volume24hQuote: "181857.9585",
+      openInterest: "4070.88",
+      openInterestUsd: "1775880.69",
+      source: "public",
+      warnings: [],
+      updatedAt: "2026-06-01T00:00:00.000Z"
+    },
+    {
+      exchange: { id: "okx", name: "OKX" },
+      querySymbol: "TSLA",
+      contractSymbol: "TSLA-USDT-SWAP",
+      status: "supported",
+      quoteAsset: "USDT",
+      lastPrice: "438.5",
+      markPrice: "438.42",
+      fundingRate: "0.0001",
+      openInterestUsd: "5774785.87",
+      source: "public",
+      warnings: [],
+      updatedAt: "2026-06-01T00:00:00.000Z"
+    }
+  ]
+};
+
 function mockFetch(payload: SearchResponse = response) {
   const fetchMock = vi.fn(async () => ({
     ok: true,
     json: async () => payload
   })) as unknown as typeof fetch;
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+function mockFetchRoutes() {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    return {
+      ok: true,
+      json: async () => (url.includes("/api/tradfi/search") ? tradfiResponse : response)
+    };
+  }) as unknown as typeof fetch;
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
 }
@@ -175,5 +239,23 @@ describe("App", () => {
 
     expect(window.localStorage.getItem("exchangeStatusMonitor.credentials.v1")).toBeNull();
     expect(screen.getByText("Binance missing")).toBeInTheDocument();
+  });
+
+  it("navigates to stock perpetuals and renders cross-exchange market data", async () => {
+    const fetchMock = mockFetchRoutes();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<App />);
+
+    await user.click(screen.getByRole("link", { name: /stock perps/i }));
+    await user.click(screen.getByRole("button", { name: /search/i }));
+
+    await screen.findByText("TSLAUSDT");
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:4000/api/tradfi/search?symbol=TSLA");
+    expect(screen.getByRole("heading", { name: /stock perpetual monitor/i })).toBeInTheDocument();
+    expect(screen.getByText("0.5000%")).toBeInTheDocument();
+    expect(screen.getByText("Funding diff 0.0100%")).toBeInTheDocument();
+    expect(screen.getByText("436.24")).toBeInTheDocument();
+    expect(screen.getByText("$1.78M")).toBeInTheDocument();
+    expect(screen.getByText("0.0100%")).toBeInTheDocument();
   });
 });

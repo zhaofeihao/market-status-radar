@@ -1,9 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, KeyRound, RefreshCcw, Save, Search, Trash2, XCircle } from "lucide-react";
-import type { ExchangeCoinStatus, ExchangePriceStatus, FundingStatus, SearchCredentials, SearchResponse, SupportStatus } from "@status-monitor/shared";
-import { searchCoin } from "./api.js";
+import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
+import { AlertTriangle, BarChart3, CheckCircle2, KeyRound, RefreshCcw, Save, Search, Trash2, WalletCards, XCircle } from "lucide-react";
+import type {
+  ExchangeCoinStatus,
+  FundingStatus,
+  SearchCredentials,
+  SearchResponse,
+  SupportStatus,
+  TradfiMarketQuote,
+  TradfiSearchResponse
+} from "@status-monitor/shared";
+import { searchCoin, searchTradfiMarket } from "./api.js";
 import { clearCredentials, hasCredentials, loadCredentials, saveCredentials } from "./credentials.js";
 
+type Route = "status" | "tradfi";
 type FilterMode = "all" | "tradable" | "deposit_disabled" | "withdraw_disabled" | "needs_api_key" | "unknown";
 type DraftCredentials = {
   binance: { apiKey: string; apiSecret: string };
@@ -94,6 +103,27 @@ function formatWeight(weight?: string) {
   return `${(numeric <= 1 ? numeric * 100 : numeric).toFixed(2)}%`;
 }
 
+function formatCompactUsd(value?: string) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return value ?? "-";
+  }
+  return new Intl.NumberFormat("en", {
+    style: "currency",
+    currency: "USD",
+    notation: "compact",
+    maximumFractionDigits: 2
+  }).format(numeric);
+}
+
+function formatPercent(value?: string) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return "-";
+  }
+  return `${(numeric * 100).toFixed(4)}%`;
+}
+
 function summary(response: SearchResponse | null) {
   const rows = response?.results ?? [];
   return {
@@ -143,7 +173,7 @@ function CredentialStatus({ credentials, exchange, label }: { credentials: Searc
   );
 }
 
-export function App() {
+function StatusPage() {
   const [coin, setCoin] = useState("SOL");
   const [activeCoin, setActiveCoin] = useState("");
   const [result, setResult] = useState<SearchResponse | null>(null);
@@ -197,7 +227,7 @@ export function App() {
   const rows = useMemo(() => (result?.results ?? []).filter((row) => rowMatchesFilter(row, filter)), [filter, result]);
 
   return (
-    <main className="shell">
+    <>
       <section className="topbar">
         <div>
           <p className="eyebrow">Public API first</p>
@@ -478,6 +508,212 @@ export function App() {
           )}
         </div>
       </section>
+    </>
+  );
+}
+
+function tradfiSummary(response: TradfiSearchResponse | null) {
+  const rows = response?.results ?? [];
+  return {
+    venues: rows.length,
+    listed: rows.filter((row) => row.status === "supported").length,
+    fundingRows: rows.filter((row) => row.fundingRate !== undefined).length,
+    oiUsd: rows.reduce((sum, row) => sum + (Number(row.openInterestUsd) || 0), 0)
+  };
+}
+
+function TradfiPage() {
+  const [symbol, setSymbol] = useState("TSLA");
+  const [activeSymbol, setActiveSymbol] = useState("");
+  const [result, setResult] = useState<TradfiSearchResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [refreshIn, setRefreshIn] = useState(30);
+
+  const runSearch = useCallback(async (nextSymbol = activeSymbol || symbol) => {
+    const normalized = nextSymbol.trim().toUpperCase();
+    if (!normalized) {
+      return;
+    }
+
+    setIsLoading(true);
+    setError("");
+    try {
+      const data = await searchTradfiMarket(normalized);
+      setResult(data);
+      setActiveSymbol(data.symbol);
+      setRefreshIn(30);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "TradFi search failed");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [activeSymbol, symbol]);
+
+  useEffect(() => {
+    if (!activeSymbol) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setRefreshIn((current) => {
+        if (current <= 1) {
+          void runSearch(activeSymbol);
+          return 30;
+        }
+        return current - 1;
+      });
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [activeSymbol, runSearch]);
+
+  const counts = useMemo(() => tradfiSummary(result), [result]);
+  const rows = result?.results ?? [];
+
+  return (
+    <>
+      <section className="topbar tradfi-topbar">
+        <div>
+          <p className="eyebrow">TradFi perpetuals</p>
+          <h1>Stock Perpetual Monitor</h1>
+          <p className="subtitle">Funding, volume, open interest, and cross-exchange price spread for USDT stock perpetuals.</p>
+        </div>
+
+        <form
+          className="searchbox"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void runSearch(symbol);
+          }}
+        >
+          <label htmlFor="tradfi-symbol-input">Stock symbol</label>
+          <div className="searchline">
+            <input id="tradfi-symbol-input" value={symbol} onChange={(event) => setSymbol(event.target.value)} />
+            <button type="submit" disabled={isLoading}>
+              <Search aria-hidden="true" size={16} />
+              Search
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <section className="summary-grid tradfi-summary" aria-label="TradFi market summary">
+        <div><span>{counts.venues} venues</span><p>queried</p></div>
+        <div><span>{counts.listed} listed</span><p>contracts</p></div>
+        <div><span>{counts.fundingRows} funding</span><p>rates live</p></div>
+        <div><span>{formatCompactUsd(String(counts.oiUsd))}</span><p>reported OI</p></div>
+      </section>
+
+      <section className="toolbar" aria-label="TradFi result controls">
+        {result?.spread ? (
+          <div className="spread-chip">
+            <span>Max spread</span>
+            <b>{result.spread.percent}%</b>
+            <small>{result.spread.lowExchange} {result.spread.lowPrice} {"->"} {result.spread.highExchange} {result.spread.highPrice}</small>
+            {result.spread.fundingRateDiff ? <small>Funding diff {formatPercent(result.spread.fundingRateDiff)}</small> : null}
+          </div>
+        ) : (
+          <p className="countdown">Search a stock symbol to compare venues.</p>
+        )}
+        <button className="refresh" type="button" onClick={() => void runSearch(activeSymbol || symbol)} disabled={isLoading || (!activeSymbol && !symbol)}>
+          <RefreshCcw aria-hidden="true" size={16} />
+          Refresh
+        </button>
+        {activeSymbol ? <p className="countdown">Auto-refresh in {refreshIn}s</p> : null}
+      </section>
+
+      {error ? <p className="error">{error}</p> : null}
+
+      <section className="table-wrap" aria-label="Stock perpetual results">
+        <div className="result-table tradfi-table">
+          <div className="table-head tradfi-head">
+            <span>Exchange</span>
+            <span>Contract</span>
+            <span>Price</span>
+            <span>Funding</span>
+            <span>Volume 24h</span>
+            <span>Open interest</span>
+            <span>Updated</span>
+          </div>
+          {rows.length === 0 ? (
+            <div className="empty">Search a stock symbol to load live perpetual markets.</div>
+          ) : (
+            rows.map((row: TradfiMarketQuote) => (
+              <article className="table-row tradfi-row" key={row.exchange.id}>
+                <div className="exchange-cell">
+                  <strong>{row.exchange.name}</strong>
+                  <small>{row.source}</small>
+                </div>
+                <div>
+                  <strong>{row.contractSymbol || "-"}</strong>
+                  <small>{row.status}</small>
+                </div>
+                <div className="market-stack">
+                  <b>{row.markPrice ?? row.lastPrice ?? "-"}</b>
+                  <small>Last {row.lastPrice ?? "-"} / Index {row.indexPrice ?? "-"}</small>
+                  {row.bidPrice || row.askPrice ? <small>Bid {row.bidPrice ?? "-"} / Ask {row.askPrice ?? "-"}</small> : null}
+                </div>
+                <div className="market-stack">
+                  <b>{formatPercent(row.fundingRate)}</b>
+                  <small>{row.nextFundingTime ? `Next ${formatTime(row.nextFundingTime)}` : "Next -"}</small>
+                </div>
+                <div className="market-stack">
+                  <b>{formatCompactUsd(row.volume24hQuote)}</b>
+                  <small>Base {row.volume24hBase ?? "-"}</small>
+                </div>
+                <div className="market-stack">
+                  <b>{formatCompactUsd(row.openInterestUsd)}</b>
+                  <small>Raw {row.openInterest ?? "-"}</small>
+                </div>
+                <time>{formatTime(row.updatedAt)}</time>
+              </article>
+            ))
+          )}
+        </div>
+      </section>
+    </>
+  );
+}
+
+function routeFromPath(): Route {
+  return window.location.pathname === "/tradfi" ? "tradfi" : "status";
+}
+
+function AppNav({ route, onNavigate }: { route: Route; onNavigate: (route: Route) => void }) {
+  const navigate = (nextRoute: Route) => (event: MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
+    window.history.pushState(null, "", nextRoute === "tradfi" ? "/tradfi" : "/");
+    onNavigate(nextRoute);
+  };
+
+  return (
+    <nav className="app-nav" aria-label="Primary navigation">
+      <a className={route === "status" ? "active" : ""} href="/" onClick={navigate("status")}>
+        <WalletCards aria-hidden="true" size={16} />
+        Status
+      </a>
+      <a className={route === "tradfi" ? "active" : ""} href="/tradfi" onClick={navigate("tradfi")}>
+        <BarChart3 aria-hidden="true" size={16} />
+        Stock Perps
+      </a>
+    </nav>
+  );
+}
+
+export function App() {
+  const [route, setRoute] = useState<Route>(() => routeFromPath());
+
+  useEffect(() => {
+    const onPopState = () => setRoute(routeFromPath());
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  return (
+    <main className="shell">
+      <AppNav route={route} onNavigate={setRoute} />
+      {route === "tradfi" ? <TradfiPage /> : <StatusPage />}
     </main>
   );
 }

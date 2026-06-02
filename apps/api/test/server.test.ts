@@ -1,6 +1,7 @@
 import request from "supertest";
 import { describe, expect, it } from "vitest";
 import type { ExchangeAdapter } from "../src/adapters/types.js";
+import type { TradfiMarketAdapter } from "../src/tradfi/types.js";
 import { createServer } from "../src/server.js";
 
 const adapters: ExchangeAdapter[] = [
@@ -19,6 +20,34 @@ const adapters: ExchangeAdapter[] = [
         source: credentials?.bybit?.apiKey ? "api_key" : "public",
         warnings: [],
         updatedAt: "2026-05-25T00:00:00.000Z"
+      };
+    }
+  }
+];
+
+const tradfiAdapters: TradfiMarketAdapter[] = [
+  {
+    id: "bybit",
+    name: "Bybit",
+    async searchMarket({ symbol }) {
+      return {
+        exchange: { id: "bybit", name: "Bybit" },
+        querySymbol: symbol,
+        contractSymbol: `${symbol}USDT`,
+        status: "supported",
+        quoteAsset: "USDT",
+        lastPrice: "436.24",
+        markPrice: "436.24",
+        indexPrice: "435.86",
+        fundingRate: "0",
+        nextFundingTime: "2026-06-01T08:00:00.000Z",
+        volume24hBase: "415.6900",
+        volume24hQuote: "181857.9585",
+        openInterest: "4070.88",
+        openInterestUsd: "1775880.69",
+        source: "public",
+        warnings: [],
+        updatedAt: "2026-06-01T00:00:00.000Z"
       };
     }
   }
@@ -85,5 +114,29 @@ describe("createServer", () => {
       ]
     });
     expect(JSON.stringify(response.body)).not.toContain("bybit-secret");
+  });
+
+  it("rejects a tradfi search without a symbol", async () => {
+    const response = await request(createServer({ adapters, tradfiAdapters })).get("/api/tradfi/search").expect(400);
+
+    expect(response.body).toEqual({ error: "symbol query parameter is required" });
+  });
+
+  it("returns tradfi perpetual market results", async () => {
+    const response = await request(createServer({ adapters, tradfiAdapters })).get("/api/tradfi/search?symbol= tsla ").expect(200);
+
+    expect(response.body).toMatchObject({
+      symbol: "TSLA",
+      results: [
+        {
+          exchange: { id: "bybit", name: "Bybit" },
+          querySymbol: "TSLA",
+          contractSymbol: "TSLAUSDT",
+          status: "supported",
+          fundingRate: "0",
+          openInterestUsd: "1775880.69"
+        }
+      ]
+    });
   });
 });

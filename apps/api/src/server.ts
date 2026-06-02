@@ -3,9 +3,12 @@ import cors from "cors";
 import type { ExchangeAdapter } from "./adapters/types.js";
 import { searchCoinAcrossExchanges } from "./services/searchService.js";
 import type { SearchCredentials } from "@status-monitor/shared";
+import type { TradfiMarketAdapter } from "./tradfi/types.js";
+import { searchTradfiAcrossExchanges } from "./tradfi/searchService.js";
 
 export interface ServerOptions {
   adapters: ExchangeAdapter[];
+  tradfiAdapters?: TradfiMarketAdapter[];
 }
 
 export function createServer(options: ServerOptions) {
@@ -30,6 +33,20 @@ export function createServer(options: ServerOptions) {
       }
 
       res.json(await searchCoinAcrossExchanges(coin, options.adapters));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/api/tradfi/search", async (req, res, next) => {
+    try {
+      const symbol = typeof req.query.symbol === "string" ? req.query.symbol : "";
+      if (symbol.trim().length === 0) {
+        res.status(400).json({ error: "symbol query parameter is required" });
+        return;
+      }
+
+      res.json(await searchTradfiAcrossExchanges(symbol, options.tradfiAdapters ?? []));
     } catch (error) {
       next(error);
     }
