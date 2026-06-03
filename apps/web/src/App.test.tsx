@@ -170,6 +170,67 @@ describe("App", () => {
     expect(screen.getByText("Requires API key")).toBeInTheDocument();
   });
 
+  it("links supported spot and contract markets to exchange trading pages", async () => {
+    mockFetch();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: /search/i }));
+    await screen.findByText("Bitget");
+
+    const bitgetSpot = screen.getByRole("link", { name: /open bitget sol usdt spot market/i });
+    const bitgetContract = screen.getByRole("link", { name: /open bitget sol usdt contract market/i });
+    const binanceSpot = screen.getByRole("link", { name: /open binance sol usdt spot market/i });
+    const binanceContract = screen.getByRole("link", { name: /open binance sol usdt contract market/i });
+
+    expect(bitgetSpot).toHaveAttribute("href", "https://www.bitget.com/spot/SOLUSDT");
+    expect(bitgetContract).toHaveAttribute("href", "https://www.bitget.com/futures/usdt/SOLUSDT");
+    expect(binanceSpot).toHaveAttribute("href", "https://www.binance.com/en/trade/SOL_USDT?type=spot");
+    expect(binanceContract).toHaveAttribute("href", "https://www.binance.com/en/futures/SOLUSDT");
+    expect(bitgetSpot).toHaveAttribute("target", "_blank");
+    expect(bitgetSpot).toHaveAttribute("rel", "noopener noreferrer");
+  });
+
+  it("normalizes composite price quotes before building trading links", async () => {
+    mockFetch({
+      coin: "SOL",
+      updatedAt: "2026-05-25T00:00:00.000Z",
+      results: [
+        {
+          exchange: { id: "okx", name: "OKX" },
+          coin: "SOL",
+          spot: "supported",
+          contract: "supported",
+          price: {
+            quote: "USDT/USD",
+            source: "public",
+            indexComponentSource: "public",
+            indexComponents: [],
+            warnings: []
+          },
+          chains: [],
+          source: "public",
+          warnings: [],
+          updatedAt: "2026-05-25T00:00:00.000Z"
+        }
+      ]
+    });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: /search/i }));
+    await screen.findByText("OKX");
+
+    expect(screen.getByRole("link", { name: /open okx sol usdt spot market/i })).toHaveAttribute(
+      "href",
+      "https://www.okx.com/trade-spot/sol-usdt"
+    );
+    expect(screen.getByRole("link", { name: /open okx sol usdt contract market/i })).toHaveAttribute(
+      "href",
+      "https://www.okx.com/trade-swap/sol-usdt-swap"
+    );
+  });
+
   it("filters rows that need API key", async () => {
     mockFetch();
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
@@ -271,5 +332,25 @@ describe("App", () => {
     expect(screen.getByRole("dialog", { name: /bybit arbitrage signal/i })).toBeInTheDocument();
     expect(screen.getByText("Short perp / long index bias")).toBeInTheDocument();
     expect(screen.getByText(/Funding > 0.05% with premium inside normal zone/i)).toBeInTheDocument();
+  });
+
+  it("links supported stock perpetual contracts to exchange trading pages", async () => {
+    mockFetchRoutes();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<App />);
+
+    await user.click(screen.getByRole("link", { name: /stock perps/i }));
+    await user.click(screen.getByRole("button", { name: /search/i }));
+
+    await screen.findByText("TSLAUSDT");
+
+    expect(screen.getByRole("link", { name: /open bybit tslausdt stock perpetual market/i })).toHaveAttribute(
+      "href",
+      "https://www.bybit.com/trade/usdt/TSLAUSDT"
+    );
+    expect(screen.getByRole("link", { name: /open okx tsla-usdt-swap stock perpetual market/i })).toHaveAttribute(
+      "href",
+      "https://www.okx.com/trade-swap/tsla-usdt-swap"
+    );
   });
 });

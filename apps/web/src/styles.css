@@ -504,6 +504,53 @@ h1 {
   background: #ffe6df;
 }
 
+.market-link {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.market-link .badge {
+  box-shadow: inset 0 -2px 0 rgb(23 32 24 / 18%);
+}
+
+.market-link svg {
+  color: #536055;
+}
+
+.market-link:hover .badge,
+.market-link:focus-visible .badge {
+  outline: 2px solid #172018;
+  outline-offset: 2px;
+}
+
+.contract-cell {
+  display: grid;
+  gap: 3px;
+}
+
+.contract-link {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #172018;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+
+.contract-link svg {
+  color: #536055;
+}
+
+.contract-link:hover,
+.contract-link:focus-visible {
+  color: #7d2f1d;
+}
+
 .chains {
   display: grid;
   gap: 8px;

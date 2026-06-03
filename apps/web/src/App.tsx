@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
-import { AlertTriangle, BarChart3, CheckCircle2, Info, KeyRound, RefreshCcw, Save, Search, Trash2, WalletCards, X, XCircle } from "lucide-react";
+import { AlertTriangle, BarChart3, CheckCircle2, ExternalLink, Info, KeyRound, RefreshCcw, Save, Search, Trash2, WalletCards, X, XCircle } from "lucide-react";
 import type {
   ExchangeCoinStatus,
   FundingStatus,
@@ -14,6 +14,7 @@ import { clearCredentials, hasCredentials, loadCredentials, saveCredentials } fr
 
 type Route = "status" | "tradfi";
 type FilterMode = "all" | "tradable" | "deposit_disabled" | "withdraw_disabled" | "needs_api_key" | "unknown";
+type TradeMarket = "spot" | "contract";
 type ArbTone = "good" | "watch" | "risk" | "mixed" | "muted";
 type ArbSignal = {
   label: string;
@@ -74,6 +75,124 @@ function StatusBadge({ status }: { status: SupportStatus | FundingStatus }) {
       <Icon aria-hidden="true" size={14} />
       {label}
     </span>
+  );
+}
+
+function exchangeTradeUrl(row: ExchangeCoinStatus, market: TradeMarket) {
+  const base = row.coin.toUpperCase();
+  const quote = (row.price?.quote || "USDT").split(/[/-]/u)[0]!.toUpperCase();
+  const compactPair = `${base}${quote}`;
+  const underscorePair = `${base}_${quote}`;
+  const dashedPair = `${base}-${quote}`;
+  const lowerDashedPair = dashedPair.toLowerCase();
+  const lowerUnderscorePair = underscorePair.toLowerCase();
+
+  switch (row.exchange.id) {
+    case "binance":
+      return market === "spot"
+        ? `https://www.binance.com/en/trade/${underscorePair}?type=spot`
+        : `https://www.binance.com/en/futures/${compactPair}`;
+    case "okx":
+      return market === "spot"
+        ? `https://www.okx.com/trade-spot/${lowerDashedPair}`
+        : `https://www.okx.com/trade-swap/${lowerDashedPair}-swap`;
+    case "bybit":
+      return market === "spot"
+        ? `https://www.bybit.com/trade/spot/${base}/${quote}`
+        : `https://www.bybit.com/trade/usdt/${compactPair}`;
+    case "bitget":
+      return market === "spot"
+        ? `https://www.bitget.com/spot/${compactPair}`
+        : `https://www.bitget.com/futures/usdt/${compactPair}`;
+    case "gate":
+      return market === "spot"
+        ? `https://www.gate.com/trade/${underscorePair}`
+        : `https://www.gate.com/futures/USDT/${underscorePair}`;
+    case "htx":
+      return market === "spot"
+        ? `https://www.htx.com/trade/${lowerUnderscorePair}?type=spot`
+        : `https://www.htx.com/futures/linear_swap/exchange#contract_code=${dashedPair}&contract_type=swap`;
+    case "kraken":
+      return market === "spot"
+        ? `https://pro.kraken.com/app/trade/${dashedPair}`
+        : `https://futures.kraken.com/trade/futures/PF_${base}${quote}`;
+    default:
+      return undefined;
+  }
+}
+
+function MarketStatusCell({ row, market }: { row: ExchangeCoinStatus; market: TradeMarket }) {
+  const status = market === "spot" ? row.spot : row.contract;
+  const href = status === "supported" ? exchangeTradeUrl(row, market) : undefined;
+  const quote = (row.price?.quote || "USDT").split(/[/-]/u)[0]!.toUpperCase();
+
+  if (!href) {
+    return <StatusBadge status={status} />;
+  }
+
+  return (
+    <a
+      className="market-link"
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={`Open ${row.exchange.name} ${row.coin} ${quote} ${market} market`}
+      title={`Open ${row.exchange.name} ${market} market`}
+    >
+      <StatusBadge status={status} />
+      <ExternalLink aria-hidden="true" size={13} />
+    </a>
+  );
+}
+
+function tradfiTradeUrl(row: TradfiMarketQuote) {
+  const symbol = row.contractSymbol.toUpperCase();
+  const compactSymbol = symbol.replace(/[-_]/gu, "").replace(/SWAP$/u, "");
+  const lowerSymbol = symbol.toLowerCase();
+
+  switch (row.exchange.id) {
+    case "binance":
+      return `https://www.binance.com/en/futures/${compactSymbol}`;
+    case "okx":
+      return `https://www.okx.com/trade-swap/${lowerSymbol}`;
+    case "bybit":
+      return `https://www.bybit.com/trade/usdt/${compactSymbol}`;
+    case "bitget":
+      return `https://www.bitget.com/futures/usdt/${compactSymbol}`;
+    case "gate":
+      return `https://www.gate.com/futures/USDT/${symbol.replace(/-/gu, "_")}`;
+    default:
+      return undefined;
+  }
+}
+
+function TradfiContractCell({ row }: { row: TradfiMarketQuote }) {
+  const href = row.status === "supported" && row.contractSymbol ? tradfiTradeUrl(row) : undefined;
+
+  if (!href) {
+    return (
+      <div>
+        <strong>{row.contractSymbol || "-"}</strong>
+        <small>{row.status}</small>
+      </div>
+    );
+  }
+
+  return (
+    <div className="contract-cell">
+      <a
+        className="contract-link"
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label={`Open ${row.exchange.name} ${row.contractSymbol} stock perpetual market`}
+        title={`Open ${row.exchange.name} stock perpetual market`}
+      >
+        <strong>{row.contractSymbol}</strong>
+        <ExternalLink aria-hidden="true" size={13} />
+      </a>
+      <small>{row.status}</small>
+    </div>
   );
 }
 
@@ -624,8 +743,8 @@ function StatusPage() {
                     ) : null}
                   </div>
                 </div>
-                <StatusBadge status={row.spot} />
-                <StatusBadge status={row.contract} />
+                <MarketStatusCell row={row} market="spot" />
+                <MarketStatusCell row={row} market="contract" />
                 <div className="components-cell">
                   {row.price?.indexComponents.length ? (
                     <details className="index-components">
@@ -850,10 +969,7 @@ function TradfiPage() {
                   <strong>{row.exchange.name}</strong>
                   <small>{row.source}</small>
                 </div>
-                <div>
-                  <strong>{row.contractSymbol || "-"}</strong>
-                  <small>{row.status}</small>
-                </div>
+                <TradfiContractCell row={row} />
                 <div className="market-stack">
                   <b>{row.markPrice ?? row.lastPrice ?? "-"}</b>
                   <small>Last {row.lastPrice ?? "-"} / Index {row.indexPrice ?? "-"}</small>
