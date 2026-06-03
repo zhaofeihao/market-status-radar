@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
-import { AlertTriangle, BarChart3, CheckCircle2, KeyRound, RefreshCcw, Save, Search, Trash2, WalletCards, XCircle } from "lucide-react";
+import { AlertTriangle, BarChart3, CheckCircle2, Info, KeyRound, RefreshCcw, Save, Search, Trash2, WalletCards, X, XCircle } from "lucide-react";
 import type {
   ExchangeCoinStatus,
   FundingStatus,
@@ -14,6 +14,21 @@ import { clearCredentials, hasCredentials, loadCredentials, saveCredentials } fr
 
 type Route = "status" | "tradfi";
 type FilterMode = "all" | "tradable" | "deposit_disabled" | "withdraw_disabled" | "needs_api_key" | "unknown";
+type ArbTone = "good" | "watch" | "risk" | "mixed" | "muted";
+type ArbSignal = {
+  label: string;
+  tone: ArbTone;
+  zone: string;
+  direction: string;
+  thesis: string;
+  oiRead: string;
+  risk: string;
+};
+type PremiumSpread = {
+  value: number;
+  low: TradfiMarketQuote;
+  high: TradfiMarketQuote;
+};
 type DraftCredentials = {
   binance: { apiKey: string; apiSecret: string };
   okx: { apiKey: string; apiSecret: string; passphrase: string };
@@ -122,6 +137,157 @@ function formatPercent(value?: string) {
     return "-";
   }
   return `${(numeric * 100).toFixed(4)}%`;
+}
+
+function numericField(value?: string) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : undefined;
+}
+
+function premiumZone(premium?: number) {
+  if (premium === undefined) {
+    return "No premium data";
+  }
+  const absolute = Math.abs(premium);
+  if (absolute <= 0.005) {
+    return "Normal zone";
+  }
+  if (absolute < 0.01) {
+    return "Neutral watch";
+  }
+  if (absolute <= 0.03) {
+    return "Watch zone";
+  }
+  if (absolute <= 0.05) {
+    return "High-risk watch";
+  }
+  return "Extreme zone";
+}
+
+function fundingDirection(funding?: number) {
+  if (funding === undefined || Math.abs(funding) < 0.000001) {
+    return "No funding edge";
+  }
+  return funding > 0 ? "Short perp / long index bias" : "Long perp / short index bias";
+}
+
+function evaluateArbSignal(row: TradfiMarketQuote): ArbSignal {
+  const premium = numericField(row.premium);
+  const funding = numericField(row.fundingRate);
+  const zone = premiumZone(premium);
+  const direction = fundingDirection(funding);
+  const oiRead = row.openInterestUsd || row.openInterest
+    ? "OI is available for sizing context. Direction still needs repeated refreshes or history to confirm whether positions are building."
+    : "OI is unavailable on this venue, so position buildup cannot be confirmed here.";
+
+  if (premium === undefined || funding === undefined) {
+    return {
+      label: "No data",
+      tone: "muted",
+      zone,
+      direction,
+      thesis: "Premium and funding are both required before this row can produce an arbitrage read.",
+      oiRead,
+      risk: "Skip direction scoring until both inputs are live."
+    };
+  }
+
+  const absolutePremium = Math.abs(premium);
+  const highFunding = Math.abs(funding) > 0.0005;
+  const opposingBasis = Math.sign(premium) !== 0 && Math.sign(funding) !== 0 && Math.sign(premium) !== Math.sign(funding);
+
+  if (absolutePremium > 0.05) {
+    return {
+      label: "Risk",
+      tone: "risk",
+      zone,
+      direction,
+      thesis: "Premium is beyond 5%, so basis risk dominates the funding edge.",
+      oiRead,
+      risk: "Extreme premium can keep widening before convergence. Treat leverage, liquidity, and liquidation distance as primary constraints."
+    };
+  }
+
+  if (absolutePremium >= 0.03) {
+    return {
+      label: "Risk Watch",
+      tone: "risk",
+      zone,
+      direction,
+      thesis: "Premium is between 3% and 5%, which is already stretched even if funding is attractive.",
+      oiRead,
+      risk: "The trade can be correct on carry and still lose money if the premium expands faster than funding accrues."
+    };
+  }
+
+  if (absolutePremium >= 0.01) {
+    return {
+      label: "Watch OI",
+      tone: "watch",
+      zone,
+      direction,
+      thesis: "Premium is in the 1% to 3% warning band. Funding alone is not enough; watch whether OI keeps increasing.",
+      oiRead,
+      risk: "Increasing OI may mean longs or shorts are still adding, so premium can continue expanding before it mean-reverts."
+    };
+  }
+
+  if (absolutePremium > 0.005) {
+    return {
+      label: opposingBasis ? "Mixed" : "Neutral Watch",
+      tone: opposingBasis ? "mixed" : "watch",
+      zone,
+      direction,
+      thesis: opposingBasis
+        ? "Funding direction and premium sign are not aligned, so entry basis can work against the carry."
+        : "Premium is modest but outside the clean normal band. Wait for a tighter basis or stronger funding.",
+      oiRead,
+      risk: "This is not the clean funding-high, premium-small setup."
+    };
+  }
+
+  if (highFunding) {
+    return {
+      label: "Good",
+      tone: "good",
+      zone,
+      direction,
+      thesis: "Funding > 0.05% with premium inside normal zone. This is the cleanest carry setup in the current rule set.",
+      oiRead,
+      risk: "Still confirm borrow, fees, slippage, funding timestamp, and whether the index leg is executable."
+    };
+  }
+
+  return {
+    label: opposingBasis ? "Mixed" : "Neutral",
+    tone: opposingBasis ? "mixed" : "muted",
+    zone,
+    direction,
+    thesis: opposingBasis
+      ? "Premium is small, but the funding direction and basis sign are not aligned."
+      : "Premium is normal, but funding is not high enough to create a strong carry signal.",
+    oiRead,
+    risk: "Low funding can be consumed by fees, slippage, and hedge financing."
+  };
+}
+
+function premiumSpreadFromRows(rows: TradfiMarketQuote[]): PremiumSpread | undefined {
+  const priced = rows
+    .map((row) => ({ row, premium: numericField(row.premium) }))
+    .filter((item): item is { row: TradfiMarketQuote; premium: number } => item.premium !== undefined);
+  if (priced.length < 2) {
+    return undefined;
+  }
+  const low = priced.reduce((best, item) => (item.premium < best.premium ? item : best), priced[0]!);
+  const high = priced.reduce((best, item) => (item.premium > best.premium ? item : best), priced[0]!);
+  return { value: high.premium - low.premium, low: low.row, high: high.row };
+}
+
+function bestArbSetup(rows: TradfiMarketQuote[]) {
+  const evaluated = rows.map((row) => ({ row, signal: evaluateArbSignal(row), funding: Math.abs(numericField(row.fundingRate) ?? 0) }));
+  return evaluated
+    .filter((item) => item.signal.label === "Good")
+    .sort((a, b) => b.funding - a.funding)[0] ?? evaluated.sort((a, b) => b.funding - a.funding)[0];
 }
 
 function summary(response: SearchResponse | null) {
@@ -529,6 +695,7 @@ function TradfiPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [refreshIn, setRefreshIn] = useState(30);
+  const [selectedSignalId, setSelectedSignalId] = useState("");
 
   const runSearch = useCallback(async (nextSymbol = activeSymbol || symbol) => {
     const normalized = nextSymbol.trim().toUpperCase();
@@ -570,6 +737,10 @@ function TradfiPage() {
 
   const counts = useMemo(() => tradfiSummary(result), [result]);
   const rows = result?.results ?? [];
+  const premiumSpread = useMemo(() => premiumSpreadFromRows(rows), [rows]);
+  const bestSetup = useMemo(() => bestArbSetup(rows), [rows]);
+  const selectedSignalRow = rows.find((row) => row.exchange.id === selectedSignalId);
+  const selectedSignal = selectedSignalRow ? evaluateArbSignal(selectedSignalRow) : undefined;
 
   return (
     <>
@@ -605,6 +776,36 @@ function TradfiPage() {
         <div><span>{formatCompactUsd(String(counts.oiUsd))}</span><p>reported OI</p></div>
       </section>
 
+      <section className="arb-lens" aria-label="Arbitrage decision lens">
+        <div className="arb-lens-head">
+          <div>
+            <span className="eyebrow">Arb Lens</span>
+            <h2>Premium + Funding</h2>
+          </div>
+          <small title="Premium is (Perp - Index) / Index. Funding determines which side pays. OI helps judge whether positioning is still building.">
+            <Info aria-hidden="true" size={15} />
+            Rules tooltip
+          </small>
+        </div>
+        <div className="arb-metrics">
+          <div>
+            <span title="Best row from the current rule set. Good signals require high absolute funding and premium inside +/-0.5%.">Best Setup</span>
+            <b>{bestSetup ? bestSetup.row.exchange.name : "-"}</b>
+            <small>{bestSetup ? bestSetup.signal.direction : "Search to score venues"}</small>
+          </div>
+          <div>
+            <span title="Highest premium minus lowest premium across venues. Direction hints at cross-venue basis: short highest premium and long lowest premium.">Premium Spread</span>
+            <b>{premiumSpread ? formatPercent(String(premiumSpread.value)) : "-"}</b>
+            <small>{premiumSpread ? `${premiumSpread.high.exchange.name} high / ${premiumSpread.low.exchange.name} low` : "Need 2 premium values"}</small>
+          </div>
+          <div>
+            <span title="Normal: within +/-0.5%. Watch: +/-1% to 3%. Extreme: beyond +/-5%.">Risk Zone</span>
+            <b>{bestSetup ? bestSetup.signal.zone : "-"}</b>
+            <small>{bestSetup ? bestSetup.signal.label : "No signal yet"}</small>
+          </div>
+        </div>
+      </section>
+
       <section className="toolbar" aria-label="TradFi result controls">
         {result?.spread ? (
           <div className="spread-chip">
@@ -631,6 +832,8 @@ function TradfiPage() {
             <span>Exchange</span>
             <span>Contract</span>
             <span>Price</span>
+            <span>Premium</span>
+            <span>Signal</span>
             <span>Funding</span>
             <span>Volume 24h</span>
             <span>Open interest</span>
@@ -639,7 +842,9 @@ function TradfiPage() {
           {rows.length === 0 ? (
             <div className="empty">Search a stock symbol to load live perpetual markets.</div>
           ) : (
-            rows.map((row: TradfiMarketQuote) => (
+            rows.map((row: TradfiMarketQuote) => {
+              const signal = evaluateArbSignal(row);
+              return (
               <article className="table-row tradfi-row" key={row.exchange.id}>
                 <div className="exchange-cell">
                   <strong>{row.exchange.name}</strong>
@@ -655,6 +860,21 @@ function TradfiPage() {
                   {row.bidPrice || row.askPrice ? <small>Bid {row.bidPrice ?? "-"} / Ask {row.askPrice ?? "-"}</small> : null}
                 </div>
                 <div className="market-stack">
+                  <b>{formatPercent(row.premium)}</b>
+                  <small>(Perp - Index) / Index</small>
+                </div>
+                <div className="market-stack">
+                  <button
+                    className={`arb-signal arb-signal-${signal.tone}`}
+                    type="button"
+                    title={signal.thesis}
+                    onClick={() => setSelectedSignalId(row.exchange.id)}
+                  >
+                    {signal.label}
+                  </button>
+                  <small>{signal.zone}</small>
+                </div>
+                <div className="market-stack">
                   <b>{formatPercent(row.fundingRate)}</b>
                   <small>{row.nextFundingTime ? `Next ${formatTime(row.nextFundingTime)}` : "Next -"}</small>
                 </div>
@@ -668,10 +888,60 @@ function TradfiPage() {
                 </div>
                 <time>{formatTime(row.updatedAt)}</time>
               </article>
-            ))
+              );
+            })
           )}
         </div>
       </section>
+
+      {selectedSignalRow && selectedSignal ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setSelectedSignalId("")}>
+          <section
+            className="signal-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${selectedSignalRow.exchange.name} arbitrage signal`}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="signal-dialog-head">
+              <div>
+                <span className={`arb-signal arb-signal-${selectedSignal.tone}`}>{selectedSignal.label}</span>
+                <h2>{selectedSignalRow.exchange.name} arbitrage signal</h2>
+              </div>
+              <button type="button" aria-label="Close signal details" onClick={() => setSelectedSignalId("")}>
+                <X aria-hidden="true" size={18} />
+              </button>
+            </div>
+            <dl className="signal-detail-grid">
+              <div title="Premium is (Perp - Index) / Index. It measures how far perp is from index.">
+                <dt>Premium</dt>
+                <dd>{formatPercent(selectedSignalRow.premium)} · {selectedSignal.zone}</dd>
+              </div>
+              <div title="Funding tells which side pays. Positive funding generally means longs pay shorts.">
+                <dt>Funding</dt>
+                <dd>{formatPercent(selectedSignalRow.fundingRate)} · {selectedSignal.direction}</dd>
+              </div>
+              <div title="OI is useful only as a trend. This app currently shows the latest OI value, not historical change.">
+                <dt>Open Interest</dt>
+                <dd>{formatCompactUsd(selectedSignalRow.openInterestUsd)} · Raw {selectedSignalRow.openInterest ?? "-"}</dd>
+              </div>
+              <div title="Premium Spread is max premium minus min premium across venues.">
+                <dt>Premium Spread</dt>
+                <dd>
+                  {premiumSpread
+                    ? `${formatPercent(String(premiumSpread.value))}: short ${premiumSpread.high.exchange.name} / long ${premiumSpread.low.exchange.name}`
+                    : "Need at least two premium values"}
+                </dd>
+              </div>
+            </dl>
+            <div className="signal-notes">
+              <p><strong>What this means</strong>{selectedSignal.thesis}</p>
+              <p><strong>OI read</strong>{selectedSignal.oiRead}</p>
+              <p><strong>Risk check</strong>{selectedSignal.risk}</p>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </>
   );
 }

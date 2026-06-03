@@ -90,6 +90,7 @@ export interface TradfiMarketQuote {
   lastPrice?: string;
   markPrice?: string;
   indexPrice?: string;
+  premium?: string;
   bidPrice?: string;
   askPrice?: string;
   fundingRate?: string;

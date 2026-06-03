@@ -26,7 +26,7 @@ describe("searchTradfiAcrossExchanges", () => {
   it("normalizes stock tickers and returns cross-exchange spread summary", async () => {
     const result = await searchTradfiAcrossExchanges(" tsla ", [
       adapter("binance", { markPrice: "436.00", fundingRate: "0", openInterestUsd: "1200000" }),
-      adapter("okx", { markPrice: "438.18", fundingRate: "0.0001", openInterestUsd: "900000" })
+      adapter("okx", { markPrice: "438.18", indexPrice: "436.00", fundingRate: "0.0001", openInterestUsd: "900000" })
     ]);
 
     expect(result.symbol).toBe("TSLA");
@@ -43,6 +43,7 @@ describe("searchTradfiAcrossExchanges", () => {
       highFundingRate: "0.0001",
       fundingRateDiff: "0.0001"
     });
+    expect(result.results[1]?.premium).toBe("0.005");
   });
 
   it("keeps partial market rows when one exchange fails", async () => {

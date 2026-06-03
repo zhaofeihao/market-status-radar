@@ -77,7 +77,8 @@ const tradfiResponse: TradfiSearchResponse = {
       lastPrice: "436.24",
       markPrice: "436.24",
       indexPrice: "435.86",
-      fundingRate: "0",
+      premium: "0.000871839",
+      fundingRate: "0.0006",
       nextFundingTime: "2026-06-01T08:00:00.000Z",
       volume24hBase: "415.6900",
       volume24hQuote: "181857.9585",
@@ -95,6 +96,8 @@ const tradfiResponse: TradfiSearchResponse = {
       quoteAsset: "USDT",
       lastPrice: "438.5",
       markPrice: "438.42",
+      indexPrice: "435.80",
+      premium: "0.006",
       fundingRate: "0.0001",
       openInterestUsd: "5774785.87",
       source: "public",
@@ -254,8 +257,19 @@ describe("App", () => {
     expect(screen.getByRole("heading", { name: /stock perpetual monitor/i })).toBeInTheDocument();
     expect(screen.getByText("0.5000%")).toBeInTheDocument();
     expect(screen.getByText("Funding diff 0.0100%")).toBeInTheDocument();
+    expect(screen.getByText("Arb Lens")).toBeInTheDocument();
+    expect(screen.getByText("Premium Spread")).toBeInTheDocument();
+    expect(screen.getByText("0.5128%")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /good/i })).toBeInTheDocument();
     expect(screen.getByText("436.24")).toBeInTheDocument();
+    expect(screen.getByText("0.0872%")).toBeInTheDocument();
     expect(screen.getByText("$1.78M")).toBeInTheDocument();
     expect(screen.getByText("0.0100%")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /good/i }));
+
+    expect(screen.getByRole("dialog", { name: /bybit arbitrage signal/i })).toBeInTheDocument();
+    expect(screen.getByText("Short perp / long index bias")).toBeInTheDocument();
+    expect(screen.getByText(/Funding > 0.05% with premium inside normal zone/i)).toBeInTheDocument();
   });
 });

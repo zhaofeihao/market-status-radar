@@ -24,6 +24,15 @@ function fixedRate(value: number) {
   return value.toFixed(12).replace(/\.?0+$/u, "");
 }
 
+function premiumFromRow(row: TradfiMarketQuote): string | undefined {
+  const perp = Number(row.markPrice ?? row.lastPrice);
+  const index = Number(row.indexPrice);
+  if (!Number.isFinite(perp) || !Number.isFinite(index) || index <= 0) {
+    return undefined;
+  }
+  return fixedRate((perp - index) / index);
+}
+
 function fundingRateDiff(low: TradfiMarketQuote, high: TradfiMarketQuote) {
   const lowFunding = Number(low.fundingRate);
   const highFunding = Number(high.fundingRate);
@@ -80,7 +89,7 @@ export async function searchTradfiAcrossExchanges(symbolInput: string, adapters:
 
   return {
     symbol,
-    results: settled,
+    results: settled.map((row) => ({ ...row, premium: row.premium ?? premiumFromRow(row) })),
     spread: spreadFromRows(settled),
     updatedAt: new Date().toISOString()
   };
