@@ -1,7 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { App } from "./App.js";
 import type { SearchResponse, TradfiSearchResponse } from "@status-monitor/shared";
 
 const response: SearchResponse = {
@@ -128,10 +127,28 @@ function mockFetchRoutes() {
   return fetchMock;
 }
 
+function setBrowserLanguages(languages: string[]) {
+  Object.defineProperty(window.navigator, "languages", {
+    value: languages,
+    configurable: true
+  });
+  Object.defineProperty(window.navigator, "language", {
+    value: languages[0] ?? "en-US",
+    configurable: true
+  });
+}
+
+async function renderApp() {
+  const { App } = await import("./App.js");
+  return render(<App />);
+}
+
 describe("App", () => {
   beforeEach(() => {
+    vi.resetModules();
     vi.useFakeTimers({ shouldAdvanceTime: true });
     window.localStorage.clear();
+    setBrowserLanguages(["en-US"]);
   });
 
   afterEach(() => {
@@ -139,18 +156,49 @@ describe("App", () => {
     vi.unstubAllGlobals();
   });
 
-  it("renders the initial search console", () => {
-    render(<App />);
+  it("renders the initial search console", async () => {
+    await renderApp();
 
     expect(screen.getByRole("heading", { name: /exchange status monitor/i })).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: /coin/i })).toHaveValue("SOL");
     expect(screen.getByRole("button", { name: /search/i })).toBeInTheDocument();
   });
 
+  it("uses Chinese by default when the browser language is Chinese", async () => {
+    setBrowserLanguages(["zh-CN", "en-US"]);
+
+    await renderApp();
+
+    expect(screen.getByRole("heading", { name: "交易所状态监控" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "币种" })).toHaveValue("SOL");
+  });
+
+  it("switches languages manually", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await renderApp();
+
+    await user.click(screen.getByRole("button", { name: "中文" }));
+
+    expect(screen.getByRole("heading", { name: "交易所状态监控" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "搜索" })).toBeInTheDocument();
+  });
+
+  it("remembers the manual language selection across remounts", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const view = await renderApp();
+
+    await user.click(screen.getByRole("button", { name: "中文" }));
+    view.unmount();
+
+    await renderApp();
+
+    expect(screen.getByRole("heading", { name: "交易所状态监控" })).toBeInTheDocument();
+  });
+
   it("searches a coin and renders status rows", async () => {
     const fetchMock = mockFetch();
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    render(<App />);
+    await renderApp();
 
     await user.click(screen.getByRole("button", { name: /search/i }));
 
@@ -173,7 +221,7 @@ describe("App", () => {
   it("links supported spot and contract markets to exchange trading pages", async () => {
     mockFetch();
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    render(<App />);
+    await renderApp();
 
     await user.click(screen.getByRole("button", { name: /search/i }));
     await screen.findByText("Bitget");
@@ -216,7 +264,7 @@ describe("App", () => {
       ]
     });
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    render(<App />);
+    await renderApp();
 
     await user.click(screen.getByRole("button", { name: /search/i }));
     await screen.findByText("OKX");
@@ -234,7 +282,7 @@ describe("App", () => {
   it("filters rows that need API key", async () => {
     mockFetch();
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    render(<App />);
+    await renderApp();
 
     await user.click(screen.getByRole("button", { name: /search/i }));
     await screen.findByText("Bitget");
@@ -247,7 +295,7 @@ describe("App", () => {
   it("refreshes the current result manually", async () => {
     const fetchMock = mockFetch();
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    render(<App />);
+    await renderApp();
 
     await user.click(screen.getByRole("button", { name: /search/i }));
     await screen.findByText("Bitget");
@@ -259,7 +307,7 @@ describe("App", () => {
   it("saves API keys locally and sends them with searches", async () => {
     const fetchMock = mockFetch();
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    render(<App />);
+    await renderApp();
 
     await user.click(screen.getByRole("button", { name: /api keys/i }));
     await user.type(screen.getByLabelText("Binance API key"), "binance-key");
@@ -295,7 +343,7 @@ describe("App", () => {
       JSON.stringify({ binance: { apiKey: "binance-key", apiSecret: "binance-secret" } })
     );
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    render(<App />);
+    await renderApp();
 
     await user.click(screen.getByRole("button", { name: /api keys/i }));
     expect(screen.getByText("Binance configured locally")).toBeInTheDocument();
@@ -308,7 +356,7 @@ describe("App", () => {
   it("navigates to stock perpetuals and renders cross-exchange market data", async () => {
     const fetchMock = mockFetchRoutes();
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    render(<App />);
+    await renderApp();
 
     await user.click(screen.getByRole("link", { name: /stock perps/i }));
     await user.click(screen.getByRole("button", { name: /search/i }));
@@ -337,7 +385,7 @@ describe("App", () => {
   it("links supported stock perpetual contracts to exchange trading pages", async () => {
     mockFetchRoutes();
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    render(<App />);
+    await renderApp();
 
     await user.click(screen.getByRole("link", { name: /stock perps/i }));
     await user.click(screen.getByRole("button", { name: /search/i }));

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
 import { AlertTriangle, BarChart3, CheckCircle2, ExternalLink, Info, KeyRound, RefreshCcw, Save, Search, Trash2, WalletCards, X, XCircle } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import type {
   ExchangeCoinStatus,
   FundingStatus,
@@ -11,6 +13,7 @@ import type {
 } from "@status-monitor/shared";
 import { searchCoin, searchTradfiMarket } from "./api.js";
 import { clearCredentials, hasCredentials, loadCredentials, saveCredentials } from "./credentials.js";
+import { localeFromLanguage, type SupportedLanguage } from "./i18n.js";
 
 type Route = "status" | "tradfi";
 type FilterMode = "all" | "tradable" | "deposit_disabled" | "withdraw_disabled" | "needs_api_key" | "unknown";
@@ -36,27 +39,25 @@ type DraftCredentials = {
   bybit: { apiKey: string; apiSecret: string };
 };
 
-const filters: Array<{ value: FilterMode; label: string }> = [
-  { value: "all", label: "All" },
-  { value: "tradable", label: "Tradable" },
-  { value: "deposit_disabled", label: "Deposit disabled" },
-  { value: "withdraw_disabled", label: "Withdraw disabled" },
-  { value: "needs_api_key", label: "Needs API key" },
-  { value: "unknown", label: "Unknown" }
+const filters: Array<{ value: FilterMode; labelKey: string }> = [
+  { value: "all", labelKey: "filter.all" },
+  { value: "tradable", labelKey: "filter.tradable" },
+  { value: "deposit_disabled", labelKey: "filter.deposit_disabled" },
+  { value: "withdraw_disabled", labelKey: "filter.withdraw_disabled" },
+  { value: "needs_api_key", labelKey: "filter.needs_api_key" },
+  { value: "unknown", labelKey: "filter.unknown" }
 ];
 
-function supportLabel(status: SupportStatus) {
-  return status === "supported" ? "Supported" : status === "unsupported" ? "Unsupported" : status === "error" ? "Error" : "Unknown";
+function supportLabel(status: SupportStatus, t: TFunction) {
+  return t(`badge.${status}`);
 }
 
-function fundingLabel(status: FundingStatus) {
-  if (status === "requires_api_key") {
-    return "Requires API key";
-  }
-  return status.charAt(0).toUpperCase() + status.slice(1);
+function fundingLabel(status: FundingStatus, t: TFunction) {
+  return t(`badge.${status}`);
 }
 
 function StatusBadge({ status }: { status: SupportStatus | FundingStatus }) {
+  const { t } = useTranslation();
   const tone =
     status === "supported" || status === "enabled"
       ? "good"
@@ -68,7 +69,7 @@ function StatusBadge({ status }: { status: SupportStatus | FundingStatus }) {
             ? "error"
             : "muted";
   const Icon = tone === "good" ? CheckCircle2 : tone === "bad" || tone === "error" ? XCircle : tone === "key" ? KeyRound : AlertTriangle;
-  const label = status === "supported" || status === "unsupported" ? supportLabel(status) : fundingLabel(status as FundingStatus);
+  const label = status === "supported" || status === "unsupported" ? supportLabel(status, t) : fundingLabel(status as FundingStatus, t);
 
   return (
     <span className={`badge badge-${tone}`}>
@@ -122,9 +123,11 @@ function exchangeTradeUrl(row: ExchangeCoinStatus, market: TradeMarket) {
 }
 
 function MarketStatusCell({ row, market }: { row: ExchangeCoinStatus; market: TradeMarket }) {
+  const { t } = useTranslation();
   const status = market === "spot" ? row.spot : row.contract;
   const href = status === "supported" ? exchangeTradeUrl(row, market) : undefined;
   const quote = (row.price?.quote || "USDT").split(/[/-]/u)[0]!.toUpperCase();
+  const marketLabel = t(market === "spot" ? "common.spot" : "common.contract");
 
   if (!href) {
     return <StatusBadge status={status} />;
@@ -136,8 +139,8 @@ function MarketStatusCell({ row, market }: { row: ExchangeCoinStatus; market: Tr
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      aria-label={`Open ${row.exchange.name} ${row.coin} ${quote} ${market} market`}
-      title={`Open ${row.exchange.name} ${market} market`}
+      aria-label={t("status.openMarket", { exchange: row.exchange.name, coin: row.coin, quote, market: marketLabel })}
+      title={t("status.openMarketTitle", { exchange: row.exchange.name, market: marketLabel })}
     >
       <StatusBadge status={status} />
       <ExternalLink aria-hidden="true" size={13} />
@@ -167,6 +170,7 @@ function tradfiTradeUrl(row: TradfiMarketQuote) {
 }
 
 function TradfiContractCell({ row }: { row: TradfiMarketQuote }) {
+  const { t } = useTranslation();
   const href = row.status === "supported" && row.contractSymbol ? tradfiTradeUrl(row) : undefined;
 
   if (!href) {
@@ -185,8 +189,8 @@ function TradfiContractCell({ row }: { row: TradfiMarketQuote }) {
         href={href}
         target="_blank"
         rel="noopener noreferrer"
-        aria-label={`Open ${row.exchange.name} ${row.contractSymbol} stock perpetual market`}
-        title={`Open ${row.exchange.name} stock perpetual market`}
+        aria-label={t("tradfi.openContract", { exchange: row.exchange.name, contract: row.contractSymbol })}
+        title={t("tradfi.openContractTitle", { exchange: row.exchange.name })}
       >
         <strong>{row.contractSymbol}</strong>
         <ExternalLink aria-hidden="true" size={13} />
@@ -217,11 +221,11 @@ function rowMatchesFilter(row: ExchangeCoinStatus, filter: FilterMode) {
   }
 }
 
-function formatTime(value?: string) {
+function formatTime(value: string | undefined, language: string) {
   if (!value) {
     return "-";
   }
-  return new Intl.DateTimeFormat("en", {
+  return new Intl.DateTimeFormat(localeFromLanguage(language), {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
@@ -237,12 +241,12 @@ function formatWeight(weight?: string) {
   return `${(numeric <= 1 ? numeric * 100 : numeric).toFixed(2)}%`;
 }
 
-function formatCompactUsd(value?: string) {
+function formatCompactUsd(value: string | undefined, language: string) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) {
     return value ?? "-";
   }
-  return new Intl.NumberFormat("en", {
+  return new Intl.NumberFormat(localeFromLanguage(language), {
     style: "currency",
     currency: "USD",
     notation: "compact",
@@ -263,51 +267,51 @@ function numericField(value?: string) {
   return Number.isFinite(numeric) ? numeric : undefined;
 }
 
-function premiumZone(premium?: number) {
+function premiumZone(premium: number | undefined, t: TFunction) {
   if (premium === undefined) {
-    return "No premium data";
+    return t("signal.noPremiumData");
   }
   const absolute = Math.abs(premium);
   if (absolute <= 0.005) {
-    return "Normal zone";
+    return t("signal.normalZone");
   }
   if (absolute < 0.01) {
-    return "Neutral watch";
+    return t("signal.neutralWatch");
   }
   if (absolute <= 0.03) {
-    return "Watch zone";
+    return t("signal.watchZone");
   }
   if (absolute <= 0.05) {
-    return "High-risk watch";
+    return t("signal.highRiskWatch");
   }
-  return "Extreme zone";
+  return t("signal.extremeZone");
 }
 
-function fundingDirection(funding?: number) {
+function fundingDirection(funding: number | undefined, t: TFunction) {
   if (funding === undefined || Math.abs(funding) < 0.000001) {
-    return "No funding edge";
+    return t("signal.noFundingEdge");
   }
-  return funding > 0 ? "Short perp / long index bias" : "Long perp / short index bias";
+  return funding > 0 ? t("signal.shortPerpLongIndex") : t("signal.longPerpShortIndex");
 }
 
-function evaluateArbSignal(row: TradfiMarketQuote): ArbSignal {
+function evaluateArbSignal(row: TradfiMarketQuote, t: TFunction): ArbSignal {
   const premium = numericField(row.premium);
   const funding = numericField(row.fundingRate);
-  const zone = premiumZone(premium);
-  const direction = fundingDirection(funding);
+  const zone = premiumZone(premium, t);
+  const direction = fundingDirection(funding, t);
   const oiRead = row.openInterestUsd || row.openInterest
-    ? "OI is available for sizing context. Direction still needs repeated refreshes or history to confirm whether positions are building."
-    : "OI is unavailable on this venue, so position buildup cannot be confirmed here.";
+    ? t("signal.oiAvailable")
+    : t("signal.oiUnavailable");
 
   if (premium === undefined || funding === undefined) {
     return {
-      label: "No data",
+      label: t("signal.noData"),
       tone: "muted",
       zone,
       direction,
-      thesis: "Premium and funding are both required before this row can produce an arbitrage read.",
+      thesis: t("signal.noDataThesis"),
       oiRead,
-      risk: "Skip direction scoring until both inputs are live."
+      risk: t("signal.noDataRisk")
     };
   }
 
@@ -317,76 +321,72 @@ function evaluateArbSignal(row: TradfiMarketQuote): ArbSignal {
 
   if (absolutePremium > 0.05) {
     return {
-      label: "Risk",
+      label: t("signal.risk"),
       tone: "risk",
       zone,
       direction,
-      thesis: "Premium is beyond 5%, so basis risk dominates the funding edge.",
+      thesis: t("signal.extremeThesis"),
       oiRead,
-      risk: "Extreme premium can keep widening before convergence. Treat leverage, liquidity, and liquidation distance as primary constraints."
+      risk: t("signal.extremeRisk")
     };
   }
 
   if (absolutePremium >= 0.03) {
     return {
-      label: "Risk Watch",
+      label: t("signal.riskWatch"),
       tone: "risk",
       zone,
       direction,
-      thesis: "Premium is between 3% and 5%, which is already stretched even if funding is attractive.",
+      thesis: t("signal.stretchedThesis"),
       oiRead,
-      risk: "The trade can be correct on carry and still lose money if the premium expands faster than funding accrues."
+      risk: t("signal.stretchedRisk")
     };
   }
 
   if (absolutePremium >= 0.01) {
     return {
-      label: "Watch OI",
+      label: t("signal.watchOi"),
       tone: "watch",
       zone,
       direction,
-      thesis: "Premium is in the 1% to 3% warning band. Funding alone is not enough; watch whether OI keeps increasing.",
+      thesis: t("signal.warningBandThesis"),
       oiRead,
-      risk: "Increasing OI may mean longs or shorts are still adding, so premium can continue expanding before it mean-reverts."
+      risk: t("signal.warningBandRisk")
     };
   }
 
   if (absolutePremium > 0.005) {
     return {
-      label: opposingBasis ? "Mixed" : "Neutral Watch",
+      label: opposingBasis ? t("signal.mixed") : t("signal.neutralWatchLabel"),
       tone: opposingBasis ? "mixed" : "watch",
       zone,
       direction,
-      thesis: opposingBasis
-        ? "Funding direction and premium sign are not aligned, so entry basis can work against the carry."
-        : "Premium is modest but outside the clean normal band. Wait for a tighter basis or stronger funding.",
+      thesis: opposingBasis ? t("signal.opposingThesis") : t("signal.modestThesis"),
       oiRead,
-      risk: "This is not the clean funding-high, premium-small setup."
+      risk: t("signal.modestRisk")
     };
   }
 
   if (highFunding) {
     return {
-      label: "Good",
+      label: t("signal.good"),
       tone: "good",
       zone,
       direction,
-      thesis: "Funding > 0.05% with premium inside normal zone. This is the cleanest carry setup in the current rule set.",
+      thesis: t("signal.goodThesis"),
       oiRead,
-      risk: "Still confirm borrow, fees, slippage, funding timestamp, and whether the index leg is executable."
+      risk: t("signal.goodRisk")
     };
   }
 
   return {
-    label: opposingBasis ? "Mixed" : "Neutral",
+    label: opposingBasis ? t("signal.mixed") : t("signal.neutral"),
     tone: opposingBasis ? "mixed" : "muted",
     zone,
     direction,
-    thesis: opposingBasis
-      ? "Premium is small, but the funding direction and basis sign are not aligned."
-      : "Premium is normal, but funding is not high enough to create a strong carry signal.",
+    thesis: opposingBasis ? t("signal.mixedThesis") : t("signal.neutralThesis"),
     oiRead,
-    risk: "Low funding can be consumed by fees, slippage, and hedge financing."
+    risk: t("signal.lowFundingRisk")
   };
 }
 
@@ -402,10 +402,10 @@ function premiumSpreadFromRows(rows: TradfiMarketQuote[]): PremiumSpread | undef
   return { value: high.premium - low.premium, low: low.row, high: high.row };
 }
 
-function bestArbSetup(rows: TradfiMarketQuote[]) {
-  const evaluated = rows.map((row) => ({ row, signal: evaluateArbSignal(row), funding: Math.abs(numericField(row.fundingRate) ?? 0) }));
+function bestArbSetup(rows: TradfiMarketQuote[], t: TFunction) {
+  const evaluated = rows.map((row) => ({ row, signal: evaluateArbSignal(row, t), funding: Math.abs(numericField(row.fundingRate) ?? 0) }));
   return evaluated
-    .filter((item) => item.signal.label === "Good")
+    .filter((item) => item.signal.tone === "good")
     .sort((a, b) => b.funding - a.funding)[0] ?? evaluated.sort((a, b) => b.funding - a.funding)[0];
 }
 
@@ -450,15 +450,17 @@ function exchangeConfigured(credentials: SearchCredentials, exchange: "binance" 
 }
 
 function CredentialStatus({ credentials, exchange, label }: { credentials: SearchCredentials; exchange: "binance" | "okx" | "bybit"; label: string }) {
+  const { t } = useTranslation();
   const configured = exchangeConfigured(credentials, exchange);
   return (
     <span className={`credential-status ${configured ? "configured" : ""}`}>
-      {label} {configured ? "configured locally" : "missing"}
+      {t(configured ? "status.configured" : "status.missing", { exchange: label })}
     </span>
   );
 }
 
 function StatusPage() {
+  const { t, i18n } = useTranslation();
   const [coin, setCoin] = useState("SOL");
   const [activeCoin, setActiveCoin] = useState("");
   const [result, setResult] = useState<SearchResponse | null>(null);
@@ -484,11 +486,11 @@ function StatusPage() {
       setActiveCoin(data.coin);
       setRefreshIn(60);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Search failed");
+      setError(err instanceof Error ? err.message : t("error.searchFailed"));
     } finally {
       setIsLoading(false);
     }
-  }, [activeCoin, coin, credentials]);
+  }, [activeCoin, coin, credentials, t]);
 
   useEffect(() => {
     if (!activeCoin) {
@@ -515,9 +517,9 @@ function StatusPage() {
     <>
       <section className="topbar">
         <div>
-          <p className="eyebrow">Public API first</p>
-          <h1>Exchange Status Monitor</h1>
-          <p className="subtitle">Spot, contract, deposit, and withdrawal status across seven exchanges.</p>
+          <p className="eyebrow">{t("status.eyebrow")}</p>
+          <h1>{t("status.title")}</h1>
+          <p className="subtitle">{t("status.subtitle")}</p>
         </div>
 
         <form
@@ -527,27 +529,27 @@ function StatusPage() {
             void runSearch(coin);
           }}
         >
-          <label htmlFor="coin-input">Coin</label>
+          <label htmlFor="coin-input">{t("status.coin")}</label>
           <div className="searchline">
             <input id="coin-input" value={coin} onChange={(event) => setCoin(event.target.value)} />
             <button type="submit" disabled={isLoading}>
               <Search aria-hidden="true" size={16} />
-              Search
+              {t("common.search")}
             </button>
             <button className="key-button" type="button" onClick={() => setSettingsOpen((open) => !open)}>
               <KeyRound aria-hidden="true" size={16} />
-              API Keys
+              {t("status.apiKeys")}
             </button>
           </div>
         </form>
       </section>
 
       {settingsOpen ? (
-        <section className="credential-panel" aria-label="API key settings">
+        <section className="credential-panel" aria-label={t("status.apiKeySettings")}>
           <div className="credential-panel-head">
             <div>
-              <h2>API Keys</h2>
-              <p>Stored in this browser only. Sent to the local API only during searches.</p>
+              <h2>{t("status.apiKeys")}</h2>
+              <p>{t("status.apiKeyDescription")}</p>
             </div>
             <div className="credential-actions">
               <button
@@ -559,7 +561,7 @@ function StatusPage() {
                 }}
               >
                 <Save aria-hidden="true" size={16} />
-                Save API keys
+                {t("status.saveApiKeys")}
               </button>
               <button
                 type="button"
@@ -570,7 +572,7 @@ function StatusPage() {
                 }}
               >
                 <Trash2 aria-hidden="true" size={16} />
-                Clear API keys
+                {t("status.clearApiKeys")}
               </button>
             </div>
           </div>
@@ -579,7 +581,7 @@ function StatusPage() {
             <fieldset>
               <legend>Binance</legend>
               <CredentialStatus credentials={credentials} exchange="binance" label="Binance" />
-              <label htmlFor="binance-api-key">Binance API key</label>
+              <label htmlFor="binance-api-key">{t("status.apiKey", { exchange: "Binance" })}</label>
               <input
                 id="binance-api-key"
                 value={draftCredentials.binance?.apiKey ?? ""}
@@ -590,7 +592,7 @@ function StatusPage() {
                   }))
                 }
               />
-              <label htmlFor="binance-api-secret">Binance API secret</label>
+              <label htmlFor="binance-api-secret">{t("status.apiSecret", { exchange: "Binance" })}</label>
               <input
                 id="binance-api-secret"
                 type="password"
@@ -607,7 +609,7 @@ function StatusPage() {
             <fieldset>
               <legend>OKX</legend>
               <CredentialStatus credentials={credentials} exchange="okx" label="OKX" />
-              <label htmlFor="okx-api-key">OKX API key</label>
+              <label htmlFor="okx-api-key">{t("status.apiKey", { exchange: "OKX" })}</label>
               <input
                 id="okx-api-key"
                 value={draftCredentials.okx?.apiKey ?? ""}
@@ -622,7 +624,7 @@ function StatusPage() {
                   }))
                 }
               />
-              <label htmlFor="okx-api-secret">OKX API secret</label>
+              <label htmlFor="okx-api-secret">{t("status.apiSecret", { exchange: "OKX" })}</label>
               <input
                 id="okx-api-secret"
                 type="password"
@@ -638,7 +640,7 @@ function StatusPage() {
                   }))
                 }
               />
-              <label htmlFor="okx-passphrase">OKX passphrase</label>
+              <label htmlFor="okx-passphrase">{t("status.okxPassphrase")}</label>
               <input
                 id="okx-passphrase"
                 type="password"
@@ -659,7 +661,7 @@ function StatusPage() {
             <fieldset>
               <legend>Bybit</legend>
               <CredentialStatus credentials={credentials} exchange="bybit" label="Bybit" />
-              <label htmlFor="bybit-api-key">Bybit API key</label>
+              <label htmlFor="bybit-api-key">{t("status.apiKey", { exchange: "Bybit" })}</label>
               <input
                 id="bybit-api-key"
                 value={draftCredentials.bybit?.apiKey ?? ""}
@@ -670,7 +672,7 @@ function StatusPage() {
                   }))
                 }
               />
-              <label htmlFor="bybit-api-secret">Bybit API secret</label>
+              <label htmlFor="bybit-api-secret">{t("status.apiSecret", { exchange: "Bybit" })}</label>
               <input
                 id="bybit-api-secret"
                 type="password"
@@ -685,18 +687,18 @@ function StatusPage() {
             </fieldset>
           </div>
 
-          <p className="public-only">Gate.io, Kraken, Bitget, and HTX continue using public endpoints in this version.</p>
+          <p className="public-only">{t("status.publicOnly")}</p>
         </section>
       ) : null}
 
-      <section className="summary-grid" aria-label="Search summary">
-        <div><span>{counts.exchanges} exchanges</span><p>covered</p></div>
-        <div><span>{counts.spot} spot</span><p>markets</p></div>
-        <div><span>{counts.contract} contracts</span><p>listed</p></div>
-        <div><span>{counts.needsKey} need key</span><p>funding data</p></div>
+      <section className="summary-grid" aria-label={t("status.summary")}>
+        <div><span>{t("status.exchangesCount", { count: counts.exchanges })}</span><p>{t("status.covered")}</p></div>
+        <div><span>{t("status.spotCount", { count: counts.spot })}</span><p>{t("status.markets")}</p></div>
+        <div><span>{t("status.contractCount", { count: counts.contract })}</span><p>{t("status.listed")}</p></div>
+        <div><span>{t("status.needKeyCount", { count: counts.needsKey })}</span><p>{t("status.fundingData")}</p></div>
       </section>
 
-      <section className="toolbar" aria-label="Result controls">
+      <section className="toolbar" aria-label={t("status.controls")}>
         <div className="filters">
           {filters.map((item) => (
             <button
@@ -705,31 +707,31 @@ function StatusPage() {
               type="button"
               onClick={() => setFilter(item.value)}
             >
-              {item.label}
+              {t(item.labelKey)}
             </button>
           ))}
         </div>
         <button className="refresh" type="button" onClick={() => void runSearch(activeCoin || coin)} disabled={isLoading || (!activeCoin && !coin)}>
           <RefreshCcw aria-hidden="true" size={16} />
-          Refresh
+          {t("common.refresh")}
         </button>
-        {activeCoin ? <p className="countdown">Auto-refresh in {refreshIn}s</p> : null}
+        {activeCoin ? <p className="countdown">{t("common.autoRefresh", { seconds: refreshIn })}</p> : null}
       </section>
 
       {error ? <p className="error">{error}</p> : null}
 
-      <section className="table-wrap" aria-label="Exchange results">
+      <section className="table-wrap" aria-label={t("status.results")}>
         <div className="result-table">
           <div className="table-head">
-            <span>Exchange</span>
-            <span>Spot</span>
-            <span>Contract</span>
-            <span>Components</span>
-            <span>Deposit / withdraw chains</span>
-            <span>Updated</span>
+            <span>{t("common.exchange")}</span>
+            <span>{t("common.spot")}</span>
+            <span>{t("common.contract")}</span>
+            <span>{t("status.components")}</span>
+            <span>{t("status.chains")}</span>
+            <span>{t("common.updated")}</span>
           </div>
           {rows.length === 0 ? (
-            <div className="empty">{result ? "No rows match the selected filter." : "Search a coin to load live exchange status."}</div>
+            <div className="empty">{result ? t("status.noRows") : t("status.empty")}</div>
           ) : (
             rows.map((row) => (
               <article className="table-row" key={row.exchange.id}>
@@ -748,7 +750,7 @@ function StatusPage() {
                 <div className="components-cell">
                   {row.price?.indexComponents.length ? (
                     <details className="index-components">
-                      <summary>Components {row.price.indexComponents.length}</summary>
+                      <summary>{t("status.componentsCount", { count: row.price.indexComponents.length })}</summary>
                       {row.price.indexComponents.map((component) => (
                         <div className="index-component" key={`${component.exchange}-${component.symbol ?? ""}`}>
                           <span>{component.exchange} {component.symbol ?? ""}</span>
@@ -758,25 +760,25 @@ function StatusPage() {
                       ))}
                     </details>
                   ) : row.price?.indexComponentSource === "unavailable" ? (
-                    <small className="muted">Components unavailable</small>
+                    <small className="muted">{t("status.componentsUnavailable")}</small>
                   ) : null}
                 </div>
                 <div className="chains">
                   {row.chains.length === 0 ? (
-                    <span className="muted">No public chain data</span>
+                    <span className="muted">{t("status.noChainData")}</span>
                   ) : (
                     row.chains.map((chain) => (
                       <div className="chain" key={`${row.exchange.id}-${chain.chain}-${chain.rawChain ?? ""}`}>
                         <strong>{chain.chain}</strong>
                         {chain.deposit === chain.withdraw ? (
-                          <span>Deposit &amp; withdraw <StatusBadge status={chain.deposit} /></span>
+                          <span>{t("status.depositWithdraw")} <StatusBadge status={chain.deposit} /></span>
                         ) : (
                           <>
-                            <span>Deposit <StatusBadge status={chain.deposit} /></span>
-                            <span>Withdraw <StatusBadge status={chain.withdraw} /></span>
+                            <span>{t("status.deposit")} <StatusBadge status={chain.deposit} /></span>
+                            <span>{t("status.withdraw")} <StatusBadge status={chain.withdraw} /></span>
                           </>
                         )}
-                        {chain.withdrawFee ? <small>Fee {chain.withdrawFee}</small> : null}
+                        {chain.withdrawFee ? <small>{t("status.fee", { fee: chain.withdrawFee })}</small> : null}
                       </div>
                     ))
                   )}
@@ -787,7 +789,7 @@ function StatusPage() {
                     <p className="warning" key={warning}>{warning}</p>
                   ))}
                 </div>
-                <time>{formatTime(row.updatedAt)}</time>
+                <time>{formatTime(row.updatedAt, i18n.language)}</time>
               </article>
             ))
           )}
@@ -808,6 +810,7 @@ function tradfiSummary(response: TradfiSearchResponse | null) {
 }
 
 function TradfiPage() {
+  const { t, i18n } = useTranslation();
   const [symbol, setSymbol] = useState("TSLA");
   const [activeSymbol, setActiveSymbol] = useState("");
   const [result, setResult] = useState<TradfiSearchResponse | null>(null);
@@ -830,11 +833,11 @@ function TradfiPage() {
       setActiveSymbol(data.symbol);
       setRefreshIn(30);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "TradFi search failed");
+      setError(err instanceof Error ? err.message : t("error.tradfiSearchFailed"));
     } finally {
       setIsLoading(false);
     }
-  }, [activeSymbol, symbol]);
+  }, [activeSymbol, symbol, t]);
 
   useEffect(() => {
     if (!activeSymbol) {
@@ -857,17 +860,17 @@ function TradfiPage() {
   const counts = useMemo(() => tradfiSummary(result), [result]);
   const rows = result?.results ?? [];
   const premiumSpread = useMemo(() => premiumSpreadFromRows(rows), [rows]);
-  const bestSetup = useMemo(() => bestArbSetup(rows), [rows]);
+  const bestSetup = useMemo(() => bestArbSetup(rows, t), [rows, t]);
   const selectedSignalRow = rows.find((row) => row.exchange.id === selectedSignalId);
-  const selectedSignal = selectedSignalRow ? evaluateArbSignal(selectedSignalRow) : undefined;
+  const selectedSignal = selectedSignalRow ? evaluateArbSignal(selectedSignalRow, t) : undefined;
 
   return (
     <>
       <section className="topbar tradfi-topbar">
         <div>
-          <p className="eyebrow">TradFi perpetuals</p>
-          <h1>Stock Perpetual Monitor</h1>
-          <p className="subtitle">Funding, volume, open interest, and cross-exchange price spread for USDT stock perpetuals.</p>
+          <p className="eyebrow">{t("tradfi.eyebrow")}</p>
+          <h1>{t("tradfi.title")}</h1>
+          <p className="subtitle">{t("tradfi.subtitle")}</p>
         </div>
 
         <form
@@ -877,92 +880,103 @@ function TradfiPage() {
             void runSearch(symbol);
           }}
         >
-          <label htmlFor="tradfi-symbol-input">Stock symbol</label>
+          <label htmlFor="tradfi-symbol-input">{t("tradfi.symbol")}</label>
           <div className="searchline">
             <input id="tradfi-symbol-input" value={symbol} onChange={(event) => setSymbol(event.target.value)} />
             <button type="submit" disabled={isLoading}>
               <Search aria-hidden="true" size={16} />
-              Search
+              {t("common.search")}
             </button>
           </div>
         </form>
       </section>
 
-      <section className="summary-grid tradfi-summary" aria-label="TradFi market summary">
-        <div><span>{counts.venues} venues</span><p>queried</p></div>
-        <div><span>{counts.listed} listed</span><p>contracts</p></div>
-        <div><span>{counts.fundingRows} funding</span><p>rates live</p></div>
-        <div><span>{formatCompactUsd(String(counts.oiUsd))}</span><p>reported OI</p></div>
+      <section className="summary-grid tradfi-summary" aria-label={t("tradfi.summary")}>
+        <div><span>{t("tradfi.venuesCount", { count: counts.venues })}</span><p>{t("tradfi.queried")}</p></div>
+        <div><span>{t("tradfi.listedCount", { count: counts.listed })}</span><p>{t("tradfi.contracts")}</p></div>
+        <div><span>{t("tradfi.fundingCount", { count: counts.fundingRows })}</span><p>{t("tradfi.ratesLive")}</p></div>
+        <div><span>{formatCompactUsd(String(counts.oiUsd), i18n.language)}</span><p>{t("tradfi.reportedOi")}</p></div>
       </section>
 
-      <section className="arb-lens" aria-label="Arbitrage decision lens">
+      <section className="arb-lens" aria-label={t("tradfi.arbLens")}>
         <div className="arb-lens-head">
           <div>
-            <span className="eyebrow">Arb Lens</span>
-            <h2>Premium + Funding</h2>
+            <span className="eyebrow">{t("tradfi.arbLens")}</span>
+            <h2>{t("tradfi.premiumFunding")}</h2>
           </div>
-          <small title="Premium is (Perp - Index) / Index. Funding determines which side pays. OI helps judge whether positioning is still building.">
+          <small title={t("tradfi.rulesTooltipTitle")}>
             <Info aria-hidden="true" size={15} />
-            Rules tooltip
+            {t("tradfi.rulesTooltip")}
           </small>
         </div>
         <div className="arb-metrics">
           <div>
-            <span title="Best row from the current rule set. Good signals require high absolute funding and premium inside +/-0.5%.">Best Setup</span>
+            <span title={t("tradfi.bestSetupTitle")}>{t("tradfi.bestSetup")}</span>
             <b>{bestSetup ? bestSetup.row.exchange.name : "-"}</b>
-            <small>{bestSetup ? bestSetup.signal.direction : "Search to score venues"}</small>
+            <small>{bestSetup ? bestSetup.signal.direction : t("tradfi.searchToScore")}</small>
           </div>
           <div>
-            <span title="Highest premium minus lowest premium across venues. Direction hints at cross-venue basis: short highest premium and long lowest premium.">Premium Spread</span>
+            <span title={t("tradfi.premiumSpreadTitle")}>{t("tradfi.premiumSpread")}</span>
             <b>{premiumSpread ? formatPercent(String(premiumSpread.value)) : "-"}</b>
-            <small>{premiumSpread ? `${premiumSpread.high.exchange.name} high / ${premiumSpread.low.exchange.name} low` : "Need 2 premium values"}</small>
+            <small>
+              {premiumSpread
+                ? t("tradfi.spreadHighLow", { high: premiumSpread.high.exchange.name, low: premiumSpread.low.exchange.name })
+                : t("tradfi.needPremiumValues")}
+            </small>
           </div>
           <div>
-            <span title="Normal: within +/-0.5%. Watch: +/-1% to 3%. Extreme: beyond +/-5%.">Risk Zone</span>
+            <span title={t("tradfi.riskZoneTitle")}>{t("tradfi.riskZone")}</span>
             <b>{bestSetup ? bestSetup.signal.zone : "-"}</b>
-            <small>{bestSetup ? bestSetup.signal.label : "No signal yet"}</small>
+            <small>{bestSetup ? bestSetup.signal.label : t("tradfi.noSignalYet")}</small>
           </div>
         </div>
       </section>
 
-      <section className="toolbar" aria-label="TradFi result controls">
+      <section className="toolbar" aria-label={t("tradfi.controls")}>
         {result?.spread ? (
           <div className="spread-chip">
-            <span>Max spread</span>
+            <span>{t("tradfi.maxSpread")}</span>
             <b>{result.spread.percent}%</b>
-            <small>{result.spread.lowExchange} {result.spread.lowPrice} {"->"} {result.spread.highExchange} {result.spread.highPrice}</small>
-            {result.spread.fundingRateDiff ? <small>Funding diff {formatPercent(result.spread.fundingRateDiff)}</small> : null}
+            <small>
+              {t("tradfi.spreadPath", {
+                lowExchange: result.spread.lowExchange,
+                lowPrice: result.spread.lowPrice,
+                highExchange: result.spread.highExchange,
+                highPrice: result.spread.highPrice
+              })}
+            </small>
+            {result.spread.fundingRateDiff ? <small>{t("tradfi.fundingDiff", { value: formatPercent(result.spread.fundingRateDiff) })}</small> : null}
           </div>
         ) : (
-          <p className="countdown">Search a stock symbol to compare venues.</p>
+          <p className="countdown">{t("tradfi.comparePrompt")}</p>
         )}
         <button className="refresh" type="button" onClick={() => void runSearch(activeSymbol || symbol)} disabled={isLoading || (!activeSymbol && !symbol)}>
           <RefreshCcw aria-hidden="true" size={16} />
-          Refresh
+          {t("common.refresh")}
         </button>
-        {activeSymbol ? <p className="countdown">Auto-refresh in {refreshIn}s</p> : null}
+        {activeSymbol ? <p className="countdown">{t("common.autoRefresh", { seconds: refreshIn })}</p> : null}
       </section>
 
       {error ? <p className="error">{error}</p> : null}
 
-      <section className="table-wrap" aria-label="Stock perpetual results">
+      <section className="table-wrap" aria-label={t("tradfi.results")}>
         <div className="result-table tradfi-table">
           <div className="table-head tradfi-head">
-            <span>Exchange</span>
-            <span>Contract</span>
-            <span>Price</span>
-            <span>Premium</span>
-            <span>Signal</span>
-            <span>Funding</span>
-            <span>Volume 24h</span>
-            <span>Open interest</span>
-            <span>Updated</span>
+            <span>{t("common.exchange")}</span>
+            <span>{t("tradfi.contract")}</span>
+            <span>{t("common.price")}</span>
+            <span>{t("common.premium")}</span>
+            <span>{t("common.signal")}</span>
+            <span>{t("common.funding")}</span>
+            <span>{t("tradfi.volume24h")}</span>
+            <span>{t("common.openInterest")}</span>
+            <span>{t("common.updated")}</span>
           </div>
           {rows.length === 0 ? (
-            <div className="empty">Search a stock symbol to load live perpetual markets.</div>
+            <div className="empty">{t("tradfi.empty")}</div>
           ) : (
             rows.map((row: TradfiMarketQuote) => {
-              const signal = evaluateArbSignal(row);
+              const signal = evaluateArbSignal(row, t);
               return (
               <article className="table-row tradfi-row" key={row.exchange.id}>
                 <div className="exchange-cell">
@@ -972,12 +986,12 @@ function TradfiPage() {
                 <TradfiContractCell row={row} />
                 <div className="market-stack">
                   <b>{row.markPrice ?? row.lastPrice ?? "-"}</b>
-                  <small>Last {row.lastPrice ?? "-"} / Index {row.indexPrice ?? "-"}</small>
-                  {row.bidPrice || row.askPrice ? <small>Bid {row.bidPrice ?? "-"} / Ask {row.askPrice ?? "-"}</small> : null}
+                  <small>{t("common.last")} {row.lastPrice ?? "-"} / {t("common.index")} {row.indexPrice ?? "-"}</small>
+                  {row.bidPrice || row.askPrice ? <small>{t("common.bid")} {row.bidPrice ?? "-"} / {t("common.ask")} {row.askPrice ?? "-"}</small> : null}
                 </div>
                 <div className="market-stack">
                   <b>{formatPercent(row.premium)}</b>
-                  <small>(Perp - Index) / Index</small>
+                  <small>{t("tradfi.premiumFormula")}</small>
                 </div>
                 <div className="market-stack">
                   <button
@@ -992,17 +1006,17 @@ function TradfiPage() {
                 </div>
                 <div className="market-stack">
                   <b>{formatPercent(row.fundingRate)}</b>
-                  <small>{row.nextFundingTime ? `Next ${formatTime(row.nextFundingTime)}` : "Next -"}</small>
+                  <small>{row.nextFundingTime ? `${t("common.next")} ${formatTime(row.nextFundingTime, i18n.language)}` : t("common.nextEmpty")}</small>
                 </div>
                 <div className="market-stack">
-                  <b>{formatCompactUsd(row.volume24hQuote)}</b>
-                  <small>Base {row.volume24hBase ?? "-"}</small>
+                  <b>{formatCompactUsd(row.volume24hQuote, i18n.language)}</b>
+                  <small>{t("common.base")} {row.volume24hBase ?? "-"}</small>
                 </div>
                 <div className="market-stack">
-                  <b>{formatCompactUsd(row.openInterestUsd)}</b>
-                  <small>Raw {row.openInterest ?? "-"}</small>
+                  <b>{formatCompactUsd(row.openInterestUsd, i18n.language)}</b>
+                  <small>{t("common.raw")} {row.openInterest ?? "-"}</small>
                 </div>
-                <time>{formatTime(row.updatedAt)}</time>
+                <time>{formatTime(row.updatedAt, i18n.language)}</time>
               </article>
               );
             })
@@ -1016,44 +1030,53 @@ function TradfiPage() {
             className="signal-dialog"
             role="dialog"
             aria-modal="true"
-            aria-label={`${selectedSignalRow.exchange.name} arbitrage signal`}
+            aria-label={t("tradfi.dialogAria", { exchange: selectedSignalRow.exchange.name })}
             onMouseDown={(event) => event.stopPropagation()}
           >
             <div className="signal-dialog-head">
               <div>
                 <span className={`arb-signal arb-signal-${selectedSignal.tone}`}>{selectedSignal.label}</span>
-                <h2>{selectedSignalRow.exchange.name} arbitrage signal</h2>
+                <h2>{t("tradfi.dialogTitle", { exchange: selectedSignalRow.exchange.name })}</h2>
               </div>
-              <button type="button" aria-label="Close signal details" onClick={() => setSelectedSignalId("")}>
+              <button type="button" aria-label={t("common.close")} onClick={() => setSelectedSignalId("")}>
                 <X aria-hidden="true" size={18} />
               </button>
             </div>
             <dl className="signal-detail-grid">
-              <div title="Premium is (Perp - Index) / Index. It measures how far perp is from index.">
-                <dt>Premium</dt>
+              <div title={t("tradfi.premiumTitle")}>
+                <dt>{t("common.premium")}</dt>
                 <dd>{formatPercent(selectedSignalRow.premium)} · {selectedSignal.zone}</dd>
               </div>
-              <div title="Funding tells which side pays. Positive funding generally means longs pay shorts.">
-                <dt>Funding</dt>
+              <div title={t("tradfi.fundingTitle")}>
+                <dt>{t("common.funding")}</dt>
                 <dd>{formatPercent(selectedSignalRow.fundingRate)} · {selectedSignal.direction}</dd>
               </div>
-              <div title="OI is useful only as a trend. This app currently shows the latest OI value, not historical change.">
-                <dt>Open Interest</dt>
-                <dd>{formatCompactUsd(selectedSignalRow.openInterestUsd)} · Raw {selectedSignalRow.openInterest ?? "-"}</dd>
+              <div title={t("tradfi.oiTitle")}>
+                <dt>{t("common.openInterest")}</dt>
+                <dd>
+                  {t("tradfi.openInterestRaw", {
+                    value: formatCompactUsd(selectedSignalRow.openInterestUsd, i18n.language),
+                    raw: selectedSignalRow.openInterest ?? "-"
+                  })}
+                </dd>
               </div>
-              <div title="Premium Spread is max premium minus min premium across venues.">
-                <dt>Premium Spread</dt>
+              <div title={t("tradfi.spreadTitle")}>
+                <dt>{t("tradfi.premiumSpread")}</dt>
                 <dd>
                   {premiumSpread
-                    ? `${formatPercent(String(premiumSpread.value))}: short ${premiumSpread.high.exchange.name} / long ${premiumSpread.low.exchange.name}`
-                    : "Need at least two premium values"}
+                    ? t("tradfi.spreadTrade", {
+                        value: formatPercent(String(premiumSpread.value)),
+                        high: premiumSpread.high.exchange.name,
+                        low: premiumSpread.low.exchange.name
+                      })
+                    : t("tradfi.needTwoPremiumValues")}
                 </dd>
               </div>
             </dl>
             <div className="signal-notes">
-              <p><strong>What this means</strong>{selectedSignal.thesis}</p>
-              <p><strong>OI read</strong>{selectedSignal.oiRead}</p>
-              <p><strong>Risk check</strong>{selectedSignal.risk}</p>
+              <p><strong>{t("tradfi.meaning")}</strong>{selectedSignal.thesis}</p>
+              <p><strong>{t("tradfi.oiRead")}</strong>{selectedSignal.oiRead}</p>
+              <p><strong>{t("tradfi.riskCheck")}</strong>{selectedSignal.risk}</p>
             </div>
           </section>
         </div>
@@ -1067,22 +1090,47 @@ function routeFromPath(): Route {
 }
 
 function AppNav({ route, onNavigate }: { route: Route; onNavigate: (route: Route) => void }) {
+  const { t, i18n } = useTranslation();
+  const activeLanguage = i18n.language.startsWith("zh") ? "zh" : "en";
   const navigate = (nextRoute: Route) => (event: MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault();
     window.history.pushState(null, "", nextRoute === "tradfi" ? "/tradfi" : "/");
     onNavigate(nextRoute);
   };
+  const setLanguage = (language: SupportedLanguage) => {
+    void i18n.changeLanguage(language);
+  };
 
   return (
-    <nav className="app-nav" aria-label="Primary navigation">
-      <a className={route === "status" ? "active" : ""} href="/" onClick={navigate("status")}>
-        <WalletCards aria-hidden="true" size={16} />
-        Status
-      </a>
-      <a className={route === "tradfi" ? "active" : ""} href="/tradfi" onClick={navigate("tradfi")}>
-        <BarChart3 aria-hidden="true" size={16} />
-        Stock Perps
-      </a>
+    <nav className="app-nav" aria-label={t("nav.aria")}>
+      <div className="app-nav-links">
+        <a className={route === "status" ? "active" : ""} href="/" onClick={navigate("status")}>
+          <WalletCards aria-hidden="true" size={16} />
+          {t("nav.status")}
+        </a>
+        <a className={route === "tradfi" ? "active" : ""} href="/tradfi" onClick={navigate("tradfi")}>
+          <BarChart3 aria-hidden="true" size={16} />
+          {t("nav.tradfi")}
+        </a>
+      </div>
+      <div className="language-switcher" aria-label={t("nav.language")}>
+        <button
+          className={activeLanguage === "en" ? "active" : ""}
+          type="button"
+          onClick={() => setLanguage("en")}
+          aria-pressed={activeLanguage === "en"}
+        >
+          {t("nav.english")}
+        </button>
+        <button
+          className={activeLanguage === "zh" ? "active" : ""}
+          type="button"
+          onClick={() => setLanguage("zh")}
+          aria-pressed={activeLanguage === "zh"}
+        >
+          {t("nav.chinese")}
+        </button>
+      </div>
     </nav>
   );
 }

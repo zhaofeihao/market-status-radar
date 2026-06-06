@@ -34,10 +34,19 @@ button {
   display: flex;
   gap: 8px;
   align-items: center;
+  justify-content: space-between;
   margin-bottom: 8px;
 }
 
-.app-nav a {
+.app-nav-links,
+.language-switcher {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.app-nav a,
+.language-switcher button {
   min-height: 38px;
   display: inline-flex;
   align-items: center;
@@ -51,7 +60,13 @@ button {
   text-decoration: none;
 }
 
-.app-nav a.active {
+.language-switcher button {
+  min-width: 76px;
+  justify-content: center;
+}
+
+.app-nav a.active,
+.language-switcher button.active {
   background: #172018;
   color: #fffaf0;
 }
@@ -801,6 +816,16 @@ button.arb-signal {
   .shell {
     width: min(100vw - 20px, 720px);
     padding-top: 18px;
+  }
+
+  .app-nav {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .app-nav-links,
+  .language-switcher {
+    flex-wrap: wrap;
   }
 
   .topbar {
